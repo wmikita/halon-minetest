@@ -19,6 +19,7 @@ struct ItemStack;
 class Inventory;
 struct ItemDefinition;
 class LocalPlayer;
+class ClientActiveObject;
 
 class ScriptApiClient : virtual public ScriptApiBase
 {
