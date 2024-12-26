@@ -851,11 +851,11 @@ Methods:
 * `set_look_horizontal(yaw)`
 * `set_look_vertical(pitch)`
 	* Configure the yaw and pitch of the player's viewport.
-	
+
 * `set_player_callbacks(callbacks)`
 	* Define a number of callbacks to be executed on every global
       step.  callbacks should be a table of the form:
-	  
+
 	  ```lua
 	  {
 		  on_step = function (dtime, moveresult, params) end,
@@ -885,7 +885,7 @@ Methods:
 	  This is only effective when an on\_move callback is defined.
 * `set_pos(pos)`
 	* Move the player to this location immediately.
-	  
+
 * `get_object(v)`
 	* Return a LocalObject reference corresponding to this player.
 
@@ -894,7 +894,7 @@ Methods:
 	specified by the server or by a call to set_fov.
 * `set_fov(fov, is_multiplier, transition_time)`: Sets player's FOV.
 	An FOV of nil clears the client-side override.
-	
+
 * `collision_move(pos, v, dtime)`: Simulate movement along the vector V
   from POS for a duration of DTIME.  Return a new position, vector,
   and collision information table without applying any of these
