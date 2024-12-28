@@ -216,7 +216,7 @@ LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
 		      std::vector<CollisionInfo> *collision_info)
 {
   PlayerSettings &player_settings = getPlayerSettings();
-  ScopeProfiler sp (g_profiler, "Client: luaMove", SPT_AVG, PRECISION_MICRO);
+  ScopeProfiler sp (g_profiler, "Client: luaMove", SPT_MAX, PRECISION_MICRO);
 
   if (getParent ())
     return false;

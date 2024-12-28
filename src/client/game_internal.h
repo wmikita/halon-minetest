@@ -55,6 +55,7 @@ struct GameRunData {
 	bool dig_instantly;
 	bool digging_blocked;
 	bool reset_jump_timer;
+	bool point_at_node_suppressed;
 	float nodig_delay_timer;
 	float dig_time;
 	float dig_time_complete;

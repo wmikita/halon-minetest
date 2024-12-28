@@ -19,6 +19,9 @@ private:
 	InventoryLocation m_loc;
 
 	static const luaL_Reg methods[];
+#if CHECK_CLIENT_BUILD ()
+	static const luaL_Reg csm_methods[];
+#endif /* CHECK_CLIENT_BUILD () */
 
 	static Inventory* getinv(lua_State *L, InvRef *ref);
 
@@ -84,6 +87,11 @@ private:
 	// get_location() -> location (like get_inventory(location))
 	static int l_get_location(lua_State *L);
 
+#if CHECK_CLIENT_BUILD ()
+	// set_stack_meta(self, listname, i, proto)
+	static int l_set_stack_meta (lua_State *);
+#endif /* CHECK_CLIENT_BUILD () */
+
 public:
 	InvRef(const InventoryLocation &loc);
 
@@ -93,6 +101,9 @@ public:
 	// Not callable from Lua; all references are created on the C side.
 	static void create(lua_State *L, const InventoryLocation &loc);
 	static void Register(lua_State *L);
+#if CHECK_CLIENT_BUILD ()
+	static void RegisterClient(lua_State *L);
+#endif /* CHECK_CLIENT_BUILD () */
 
 	static const char className[];
 };

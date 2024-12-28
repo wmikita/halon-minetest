@@ -448,6 +448,7 @@ bool Game::startup(volatile std::sig_atomic_t *kill,
 	// Reinit runData
 	runData = GameRunData();
 	runData.time_from_last_punch = 10.0;
+	runData.point_at_node_suppressed = false;
 
 	m_game_ui->initFlags();
 	if (g_settings->getBool("show_debug")) {
@@ -2766,7 +2767,14 @@ void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 	else
 		runData.repeat_place_timer = 0;
 
-	if (selected_def.usable && isKeyDown(KeyType::DIG)) {
+	if (!isKeyDown (KeyType::PLACE))
+	  runData.point_at_node_suppressed = 0;
+
+	if (wasKeyPressed (KeyType::PLACE)
+	    && client->modsLoaded ()
+	    && client->getScript ()->on_item_place (selected_item, pointed))
+	  runData.point_at_node_suppressed = true;
+	else if (selected_def.usable && isKeyDown(KeyType::DIG)) {
 		if (wasKeyPressed(KeyType::DIG) && (!client->modsLoaded() ||
 				!client->getScript()->on_item_use(selected_item, pointed)))
 			client->interact(INTERACT_USE, pointed);
@@ -2947,7 +2955,8 @@ void Game::handlePointingAtNode(const PointedThing &pointed,
 
 	if ((wasKeyPressed(KeyType::PLACE) ||
 			runData.repeat_place_timer >= m_repeat_place_time) &&
-			client->checkPrivilege("interact")) {
+			client->checkPrivilege("interact")
+	    && !runData.point_at_node_suppressed) {
 		runData.repeat_place_timer = 0;
 		infostream << "Place button pressed while looking at ground" << std::endl;
 

@@ -192,6 +192,27 @@ int LuaCamera::l_get_aspect_ratio(lua_State *L)
 	return 1;
 }
 
+// update_wield_item (player, transition)
+
+int
+LuaCamera::l_update_wield_item (lua_State *L)
+{
+  LocalPlayer *player = getClient (L)->getEnv ().getLocalPlayer ();
+  Camera *camera = getobject (L, 1);
+
+  sanity_check (player);
+  if (!camera)
+    return 0;
+
+  {
+    ItemStack selected_item, hand_item;
+    ItemStack &tool_item
+      = player->getWieldedItem (&selected_item, &hand_item);
+    camera->wield (tool_item, lua_toboolean (L, 2));
+  }
+  return 0;
+}
+
 Camera *LuaCamera::getobject(LuaCamera *ref)
 {
 	return ref->m_camera;
@@ -234,6 +255,7 @@ const luaL_Reg LuaCamera::methods[] = {
 	luamethod(LuaCamera, get_aspect_ratio),
 	luamethod(LuaCamera, set_look_vertical),
 	luamethod(LuaCamera, set_look_horizontal),
+	luamethod(LuaCamera, update_wield_item),
 
 	{0, 0}
 };

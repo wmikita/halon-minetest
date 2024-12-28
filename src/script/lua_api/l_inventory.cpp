@@ -9,13 +9,24 @@
 #include "common/c_content.h"
 #include "server.h"
 #include "server/serverinventorymgr.h"
+#if CHECK_CLIENT_BUILD ()
+#include "client/client.h"
+#endif /* CHECK_CLIENT_BUILD () */
+
 /*
 	InvRef
 */
 
 Inventory* InvRef::getinv(lua_State *L, InvRef *ref)
 {
-	return getServerInventoryMgr(L)->getInventory(ref->m_loc);
+#if CHECK_CLIENT_BUILD ()
+  Client *c = dynamic_cast<Client *> (getGameDef (L));
+
+  if (c)
+    return c->getInventory (ref->m_loc);
+#endif /* CHECK_CLIENT_BUILD () */
+
+  return getServerInventoryMgr(L)->getInventory(ref->m_loc);
 }
 
 InventoryList* InvRef::getlist(lua_State *L, InvRef *ref,
@@ -298,7 +309,7 @@ int InvRef::l_room_for_item(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 	InvRef *ref = checkObject<InvRef>(L, 1);
 	const char *listname = luaL_checkstring(L, 2);
-	ItemStack item = read_item(L, 3, getServer(L)->idef());
+	ItemStack item = read_item(L, 3, getGameDef(L)->idef());
 	InventoryList *list = getlist(L, ref, listname);
 	if(list){
 		lua_pushboolean(L, list->roomForItem(item));
@@ -315,7 +326,7 @@ int InvRef::l_contains_item(lua_State *L)
 	NO_MAP_LOCK_REQUIRED;
 	InvRef *ref = checkObject<InvRef>(L, 1);
 	const char *listname = luaL_checkstring(L, 2);
-	ItemStack item = read_item(L, 3, getServer(L)->idef());
+	ItemStack item = read_item(L, 3, getGameDef(L)->idef());
 	InventoryList *list = getlist(L, ref, listname);
 	bool match_meta = readParam<bool>(L, 4, false);
 	if (list) {
@@ -434,6 +445,59 @@ const luaL_Reg InvRef::methods[] = {
 	luamethod(InvRef, get_location),
 	{0,0}
 };
+
+#if CHECK_CLIENT_BUILD ()
+
+int
+InvRef::l_set_stack_meta (lua_State *L)
+{
+  NO_MAP_LOCK_REQUIRED;
+
+  InvRef *ref = checkObject<InvRef> (L, 1);
+  Inventory *inv = getinv (L, ref);
+  const char *listname = luaL_checkstring (L, 2);
+  int i = luaL_checknumber (L, 3) - 1;
+
+  if (!inv)
+    return 0;
+
+  if (!lua_isnil (L, 4))
+    {
+      ItemStack stack = read_item (L, 4, getGameDef (L)->idef ());
+      inv->overrideMetadata (listname, i, &stack);
+    }
+  else
+    inv->overrideMetadata (listname, i, NULL);
+
+  if (inv->getList (listname))
+    inv->getList (listname)->setModified (true);
+  return 0;
+}
+
+const luaL_Reg InvRef::csm_methods[] = {
+  luamethod (InvRef, is_empty),
+  luamethod (InvRef, get_size),
+  luamethod (InvRef, get_width),
+  luamethod (InvRef, get_stack),
+  luamethod (InvRef, set_stack_meta),
+  luamethod (InvRef, get_list),
+  luamethod (InvRef, get_lists),
+  luamethod (InvRef, room_for_item),
+  luamethod (InvRef, contains_item),
+  {0,0},
+};
+
+void
+InvRef::RegisterClient (lua_State *L)
+{
+  static const luaL_Reg metamethods[] = {
+    {"__gc", gc_object},
+    {0, 0},
+  };
+  registerClass (L, className, csm_methods, metamethods);
+}
+
+#endif /* CHECK_CLIENT_BUILD () */
 
 // get_inventory(location)
 int ModApiInventory::l_get_inventory(lua_State *L)

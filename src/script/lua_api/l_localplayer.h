@@ -90,6 +90,7 @@ private:
 	static int l_set_fov (lua_State *);
 	static int l_collision_move (lua_State *);
 	static int l_set_touching_ground (lua_State *);
+	static int l_get_inventory (lua_State *);
 
 	static LocalPlayer *getobject(LuaLocalPlayer *ref);
 	static LocalPlayer *getobject(lua_State *L, int narg);

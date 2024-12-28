@@ -151,7 +151,7 @@ public:
 	void setDigging(s32 button);
 
 	// Replace the wielded item mesh
-	void wield(const ItemStack &item);
+	void wield(const ItemStack &item, bool transition = true);
 
 	// Draw the wielded tool.
 	// This has to happen *after* the main scene is drawn.
@@ -249,6 +249,7 @@ private:
 	// Animation when changing wielded item
 	f32 m_wield_change_timer = 0.125f;
 	ItemStack m_wield_item_next;
+	bool m_force_new_wield_item = false;
 
 	CameraMode m_camera_mode;
 

@@ -14,6 +14,7 @@
 #include "client/client.h"
 #include "client/camera.h"
 #include "collision.h"
+#include "l_inventory.h"
 
 LuaLocalPlayer::LuaLocalPlayer(LocalPlayer *m) : m_localplayer(m)
 {
@@ -565,6 +566,17 @@ LuaLocalPlayer::l_set_touching_ground (lua_State *L)
   return 0;
 }
 
+// get_inventory (player)
+int
+LuaLocalPlayer::l_get_inventory (lua_State *L)
+{
+  InventoryLocation location;
+
+  location.setCurrentPlayer ();
+  InvRef::create (L, location);
+  return 1;
+}
+
 LocalPlayer *LuaLocalPlayer::getobject(LuaLocalPlayer *ref)
 {
 	return ref->m_localplayer;
@@ -636,6 +648,7 @@ const luaL_Reg LuaLocalPlayer::methods[] = {
 		luamethod (LuaLocalPlayer, get_fov),
 		luamethod (LuaLocalPlayer, collision_move),
 		luamethod (LuaLocalPlayer, set_touching_ground),
+		luamethod (LuaLocalPlayer, get_inventory),
 
 		{0, 0}
 };

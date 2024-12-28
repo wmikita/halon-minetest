@@ -226,6 +226,29 @@ bool ScriptApiClient::on_item_use(const ItemStack &item, const PointedThing &poi
 	return readParam<bool>(L, -1);
 }
 
+bool
+ScriptApiClient::on_item_place (const ItemStack &item, const PointedThing &pointed)
+{
+  SCRIPTAPI_PRECHECKHEADER
+
+  // Get core.registered_on_item_use
+  lua_getglobal (L, "core");
+  lua_getfield (L, -1, "registered_on_item_place");
+
+  // Push data
+  LuaItemStack::create (L, item);
+  push_pointed_thing (L, pointed, true);
+
+  // Call functions
+  try {
+    runCallbacks(2, RUN_CALLBACKS_MODE_OR);
+  } catch (LuaError &e) {
+    getClient()->setFatalError(e);
+    return true;
+  }
+  return readParam<bool>(L, -1);
+}
+
 bool ScriptApiClient::on_inventory_open(Inventory *inventory)
 {
 	SCRIPTAPI_PRECHECKHEADER

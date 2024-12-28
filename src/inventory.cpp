@@ -488,7 +488,9 @@ ItemStack ItemStack::peekItem(u32 peekcount) const
 	Inventory
 */
 
-InventoryList::InventoryList(const std::string &name, u32 size, IItemDefManager *itemdef):
+InventoryList::InventoryList(const std::string &name, u32 size, IItemDefManager *itemdef,
+			     Inventory *inventory):
+	m_inventory (inventory),
 	m_name(name),
 	m_size(size),
 	m_itemdef(itemdef)
@@ -614,6 +616,7 @@ InventoryList & InventoryList::operator = (const InventoryList &other)
 {
 	checkResizeLock();
 
+	m_inventory = other.m_inventory;
 	m_items = other.m_items;
 	m_size = other.m_size;
 	m_width = other.m_width;
@@ -914,7 +917,7 @@ Inventory & Inventory::operator = (const Inventory &other)
 		clear();
 		m_itemdef = other.m_itemdef;
 		for (InventoryList *list : other.m_lists) {
-			m_lists.push_back(new InventoryList(*list));
+			m_lists.push_back(new InventoryList(*list, this));
 		}
 		setModified();
 	}
@@ -988,7 +991,7 @@ void Inventory::deSerialize(std::istream &is)
 			InventoryList *list = getList(listname);
 			bool create_new = !list;
 			if (create_new)
-				list = new InventoryList(listname, listsize, m_itemdef);
+				list = new InventoryList(listname, listsize, m_itemdef, this);
 			else
 				list->setSize(listsize);
 			list->deSerialize(is);
@@ -1042,7 +1045,7 @@ InventoryList * Inventory::addList(const std::string &name, u32 size)
 	if (name.find(' ') != std::string::npos)
 		return nullptr;
 
-	InventoryList *list = new InventoryList(name, size, m_itemdef);
+	InventoryList *list = new InventoryList(name, size, m_itemdef, this);
 	list->setModified();
 	m_lists.push_back(list);
 	return list;

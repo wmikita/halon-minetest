@@ -368,6 +368,10 @@ Call these functions only at load time!
     * Called when the local player uses an item.
     * Newest functions are called first.
     * If any function returns true, the item use is not sent to server.
+* `core.register_on_item_place(function(item, pointed_thing))`
+    * Called when the local player places an item somewhere.
+    * Newest functions are called first.
+    * If any function returns true, the item use is not sent to server.
 * `core.register_on_modchannel_message(function(channel_name, sender, message))`
     * Called when an incoming mod channel message is received
     * You must have joined some channels before, and server must acknowledge the
@@ -904,6 +908,11 @@ Methods:
 * `set_touching_ground(touching_ground)`: Configure whether the player
   is touching the ground.  This is important for view bobbing, amongst
   other things.
+  
+* `get_inventory ()`: Return a LocalInvRef to the player's inventory.
+
+* `update_wield_item (transition)`: Update the wield item on the hand
+mesh, transitioning to the new wield item if TRANSITION is true.
 
 ### Settings
 An interface to read config files in the format of `minetest.conf`.
@@ -1119,3 +1128,36 @@ As documented in `lua_api.md`, except for obvious reasons, the `playername` fiel
 ### `ParticleSpawner` definition (`add_particlespawner`)
 
 As documented in `lua_api.md`, except for obvious reasons, the `playername` field is not supported.
+
+`LocalInvRef`
+--------
+
+A LocalInvRef is a reference to a client-side inventory.
+
+### Methods
+
+### Methods
+
+* `is_empty(listname)`: return `true` if list is empty
+* `get_size(listname)`: get size of a list
+* `get_width(listname)`: get width of a list
+* `get_stack(listname, i)`: get a copy of stack index `i` in list
+* `set_stack_meta(listname, i, stack)`: Set metadata of stack indexed
+  by i in list to that stored in stack, or remove this override if
+  STACK is nil.  Note: this function does not require that LISTNAME
+  actually exist or be sufficiently large to hold an Ith element.
+  If the player's wielditem is modified by this function, callers
+  are responsible for updating the wielditem mesh by a call to
+  localplayer.update_wield_item.  This enables specifying whether the
+  wielditem node should be updated immediately or should transition
+  between the previous and the new wielditem.
+* `get_list(listname)`: returns full list (list of `ItemStack`s)
+                        or `nil` if list doesn't exist (size 0)
+* `set_list(listname, list)`: set full list (size will not change)
+* `get_lists()`: returns table that maps listnames to inventory lists
+* `room_for_item(listname, stack):` returns `true` if the stack of items
+  can be fully added to the list.
+* `contains_item(listname, stack, [match_meta])`: returns `true` if
+  the stack of items can be fully taken from the list.
+  If `match_meta` is false, only the items' names are compared
+  (default: `false`).

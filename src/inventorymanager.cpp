@@ -921,7 +921,7 @@ void ICraftAction::apply(InventoryManager *mgr,
 	bool found = !crafted.empty();
 
 	while (found && list_craftresult->itemFits(0, crafted)) {
-		InventoryList saved_craft_list = *list_craft;
+		InventoryList saved_craft_list (*list_craft);
 
 		std::vector<ItemStack> temp;
 		// Decrement input and add crafting output

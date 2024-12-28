@@ -44,6 +44,7 @@ public:
 	bool on_punchnode(v3s16 p, MapNode node);
 	bool on_placenode(const PointedThing &pointed, const ItemDefinition &item);
 	bool on_item_use(const ItemStack &item, const PointedThing &pointed);
+	bool on_item_place (const ItemStack &, const PointedThing &);
 
 	bool on_inventory_open(Inventory *inventory);
 	void on_teleport_localplayer (const v3f &);

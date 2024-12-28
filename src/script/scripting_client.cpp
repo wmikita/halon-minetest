@@ -23,6 +23,7 @@
 #include "lua_api/l_settings.h"
 #include "lua_api/l_client_sound.h"
 #include "lua_api/l_client_object.h"
+#include "lua_api/l_inventory.h"
 
 ClientScripting::ClientScripting(Client *client):
 	ScriptApiBase(ScriptingType::Client)
@@ -67,6 +68,7 @@ void ClientScripting::InitializeModApi(lua_State *L, int top)
 	LuaSettings::Register(L);
 	ClientSoundHandle::Register(L);
 	ClientObjectRef::Register (L);
+	InvRef::RegisterClient (L);
 
 	ModApiUtil::InitializeClient(L, top);
 	ModApiClientCommon::Initialize(L, top);

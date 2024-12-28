@@ -153,10 +153,26 @@ struct ItemStack
 	ItemStackMetadata metadata;
 };
 
+class Inventory;
+
+typedef std::pair <std::string, u32> MetadataOverrideKey;
+
+class HashMetadataOverrideKey
+{
+public:
+  size_t
+  operator() (const MetadataOverrideKey &key) const
+  {
+    return (std::hash<std::string> () (key.first)
+	    ^ std::hash<u32> () (key.second));
+  }
+};
+
 class InventoryList
 {
 public:
-	InventoryList(const std::string &name, u32 size, IItemDefManager *itemdef);
+	InventoryList(const std::string &name, u32 size, IItemDefManager *itemdef,
+		      Inventory *inventory);
 	~InventoryList() = default;
 	void clearItems();
 	void setSize(u32 newsize);
@@ -165,6 +181,11 @@ public:
 	void serialize(std::ostream &os, bool incremental) const;
 	void deSerialize(std::istream &is);
 
+	InventoryList (const InventoryList &other, Inventory *parent)
+	{
+	  *this = other;
+	  this->m_inventory = parent;
+	}
 	InventoryList(const InventoryList &other) { *this = other; }
 	InventoryList & operator = (const InventoryList &other);
 	bool operator == (const InventoryList &other) const;
@@ -180,16 +201,8 @@ public:
 	u32 getUsedSlots() const;
 
 	// Get reference to item
-	const ItemStack &getItem(u32 i) const
-	{
-		assert(i < m_size); // Pre-condition
-		return m_items[i];
-	}
-	ItemStack &getItem(u32 i)
-	{
-		assert(i < m_size); // Pre-condition
-		return m_items[i];
-	}
+	inline ItemStack getItem(u32 i) const;
+
 	// Get reference to all items
 	const std::vector<ItemStack> &getItems() const { return m_items; }
 	// Returns old item. Parameter can be an empty item.
@@ -263,7 +276,12 @@ public:
 		return ResizeLocked(this);
 	}
 
+protected:
+	friend class Inventory;
+	/* Inventory object providing metadata overrides.  */
+	Inventory *m_inventory;
 private:
+
 	std::vector<ItemStack> m_items;
 	std::string m_name;
 	u32 m_size; // always the same as m_items.size()
@@ -329,7 +347,42 @@ public:
 				list->setModified(dirty);
 		}
 	}
+
+  ItemStackMetadata *
+  getMetadataOverride (std::string const &list, u32 i)
+  {
+    MetadataOverrideKey key (list, i);
+    auto iter = m_meta_overrides.find (key);
+
+    if (iter != m_meta_overrides.end ())
+      return &iter->second;
+
+    return NULL;
+  }
+
+  /* Override the metadata of the Ith item in any list named LIST with
+     the metadata in the provided stack, which is moved.  Remove this
+     override if STACK is NULL.  */
+
+  void
+  overrideMetadata (std::string const &list, u32 i, ItemStack *stack)
+  {
+    MetadataOverrideKey key (list, i);
+
+    if (stack)
+      m_meta_overrides[key] = std::move (stack->metadata);
+    else
+      m_meta_overrides.erase (key);
+  }
+
+  auto &
+  getMetadataOverrides ()
+  {
+    return m_meta_overrides;
+  }
+
 private:
+	std::unordered_map<MetadataOverrideKey, ItemStackMetadata, HashMetadataOverrideKey> m_meta_overrides;
 	// -1 if not found
 	s32 getListIndex(const std::string &name) const;
 
@@ -337,3 +390,22 @@ private:
 	IItemDefManager *m_itemdef;
 	bool m_dirty = true;
 };
+
+inline ItemStack
+InventoryList::getItem (u32 i) const
+{
+  assert (i < m_size); // Pre-condition
+  {
+#if IS_CLIENT_BUILD
+    MetadataOverrideKey key (m_name, i);
+    auto iter = m_inventory->getMetadataOverrides ().find (key);
+    if (iter != m_inventory->getMetadataOverrides ().end ())
+      {
+	ItemStack tmp = m_items[i];
+	tmp.metadata = iter->second;
+	return tmp;
+      }
+#endif /* IS_CLIENT_BUILD */
+    return m_items[i];
+  }
+}

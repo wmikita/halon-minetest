@@ -139,10 +139,12 @@ void Camera::step(f32 dtime)
 	bool was_under_zero = m_wield_change_timer < 0;
 	m_wield_change_timer = MYMIN(m_wield_change_timer + dtime, 0.125);
 
-	if (m_wield_change_timer >= 0 && was_under_zero) {
+	if ((m_wield_change_timer >= 0 && was_under_zero)
+	    || m_force_new_wield_item) {
 		m_wieldnode->setItem(m_wield_item_next, m_client);
 		m_wieldnode->setLightColorAndAnimation(m_player_light_color,
 				m_client->getAnimationTime());
+		m_force_new_wield_item = false;
 	}
 
 	if (m_view_bobbing_state != 0)
@@ -594,15 +596,21 @@ void Camera::setDigging(s32 button)
 		m_digging_button = button;
 }
 
-void Camera::wield(const ItemStack &item)
+void Camera::wield(const ItemStack &item, bool transition)
 {
 	if (item.name != m_wield_item_next.name ||
 			item.metadata != m_wield_item_next.metadata) {
-		m_wield_item_next = item;
+	  m_wield_item_next = item;
+	  if (transition)
+	    {
 		if (m_wield_change_timer > 0)
 			m_wield_change_timer = -m_wield_change_timer;
 		else if (m_wield_change_timer == 0)
 			m_wield_change_timer = -0.001;
+	        m_force_new_wield_item = false;
+	    }
+	  else
+	    m_force_new_wield_item = true;
 	}
 }
 
