@@ -192,6 +192,13 @@ public:
 	  return Player::getFov ();
 	}
 
+	inline void
+	setStandingNode (v3s16 node)
+	{
+	  m_sneak_node_exists = false;
+	  m_standing_node = node;
+	}
+
 private:
 	void accelerate(const v3f &target_speed, const f32 max_increase_H,
 		const f32 max_increase_V, const bool use_pitch);

@@ -706,6 +706,16 @@ divided between this interface and LocalPlayer.
   specified by the server.  This speed may be reset by specifying a
   speed arg of nil.
 * `set_bone_override(bone, override)`: As in lua_api.md.
+* `get_attach()`: Return the object to which this object is attached,
+if any.
+* `set_velocity(vel)`: Configure the client-side velocity of this object.
+This is not effective if the object is a LocalPlayer, and suppresses
+server-side updates till the next call where VEL is set to nil, which
+resets this override.
+* `set_position(pos)`: Configure the client-side position of this object.
+This is not effective if the object is a LocalPlayer, and suppresses
+server-side updates till the next call where VEL is set to nil, which
+resets this override.
 
 ### LocalPlayer
 An interface to retrieve information about the player and override its mechanics.
@@ -878,7 +888,9 @@ Methods:
 		  --
 		  --  Call set_touching_ground to decide whether the player is
 		  --  in contact with the ground and the likes of view bobbing
-		  --  should be enabled.
+		  --  should be enabled, and set_supporting_node to fix the
+		  --  position of the node that should be considered the location
+		  --  of the player's feet.
 		  --
 		  -- moveresult is nil if params.noclip is set.
 	  }
@@ -908,6 +920,9 @@ Methods:
 * `set_touching_ground(touching_ground)`: Configure whether the player
   is touching the ground.  This is important for view bobbing, amongst
   other things.
+  
+* `set_supporting_node(node)`: Designate a node as the location of the
+  player's feet, which affects node placement.
   
 * `get_inventory ()`: Return a LocalInvRef to the player's inventory.
 

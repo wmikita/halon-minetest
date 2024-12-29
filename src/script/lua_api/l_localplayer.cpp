@@ -577,6 +577,15 @@ LuaLocalPlayer::l_get_inventory (lua_State *L)
   return 1;
 }
 
+// set_supporting_node (player, node)
+int
+LuaLocalPlayer::l_set_supporting_node (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  player->setStandingNode (read_v3s16 (L, 2));
+  return 0;
+}
+
 LocalPlayer *LuaLocalPlayer::getobject(LuaLocalPlayer *ref)
 {
 	return ref->m_localplayer;
@@ -649,6 +658,7 @@ const luaL_Reg LuaLocalPlayer::methods[] = {
 		luamethod (LuaLocalPlayer, collision_move),
 		luamethod (LuaLocalPlayer, set_touching_ground),
 		luamethod (LuaLocalPlayer, get_inventory),
+		luamethod (LuaLocalPlayer, set_supporting_node),
 
 		{0, 0}
 };
