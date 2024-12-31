@@ -488,8 +488,11 @@ Call these functions only at load time!
 * `core.localplayer`
     * Reference to the LocalPlayer object. See [`LocalPlayer`](#localplayer) class reference for methods.
 * `core.register_on_localplayer_object_available (cb)`
-    * Register a callback to be invokved once core.localplayer's
+    * Register a callback to be invoked once core.localplayer's
       LocalObject handle is available.
+* `core.register_entity (name, entity definition)`
+	* Register a LuaEntity definition to be assigned to client-side
+	  objects for mobs named NAME.
 
 ### Privileges
 * `core.get_privilege_list()`
@@ -707,15 +710,60 @@ divided between this interface and LocalPlayer.
   speed arg of nil.
 * `set_bone_override(bone, override)`: As in lua_api.md.
 * `get_attach()`: Return the object to which this object is attached,
-if any.
-* `set_velocity(vel)`: Configure the client-side velocity of this object.
-This is not effective if the object is a LocalPlayer, and suppresses
-server-side updates till the next call where VEL is set to nil, which
-resets this override.
-* `set_position(pos)`: Configure the client-side position of this object.
-This is not effective if the object is a LocalPlayer, and suppresses
-server-side updates till the next call where VEL is set to nil, which
-resets this override.
+  if any.
+* `set_velocity(vel)`: Configure the client-side velocity of this
+  object.  This is not effective if the object is a LocalPlayer, and
+  suppresses server-side updates till the next call where VEL is set
+  to nil, which resets this override.
+* `set_position(pos)`: Configure the client-side position of this
+  object.  This is not effective if the object is a LocalPlayer, and
+  suppresses server-side updates till the next call where VEL is set
+  to nil, which resets this override.
+  Note that it makes little sense to override either position or
+  velocity without also overloading the other, and the semantics of
+  these two functions may be revised at any time to unify both
+  conditions.
+* `get_luaentity()`: Return this object's LuaEntity.
+* `set_yaw(yaw)`: Override the server-side rotation to
+  { x = 0, y = yaw, z = 0 }.  Values of nil are not accepted; call
+  set_rotation with nil to reset this override.
+* `get_yaw()`: Return the current yaw of this entity.
+* `set_rotation(rot)`: Override the server-side rotation to ROT, or
+  reset this override if nil.
+* `get_rotation()`: Retrieve the rotation of this object.
+* `get_id()`: Retrieve the object ID of this object.
+* `collision_move(pos, v, dtime)`: Simulate movement along the vector V
+  from POS for a duration of DTIME.  Return a new position, vector,
+  and collision information table without applying any of these
+  values.  This is largely useful for Lua motion functions that
+  attempt to implement a fixed physics dtime.
+
+Entity definition
+-----------------
+
+Used by `core.register_entity`.
+
+The entity definition table becomes a metatable of a newly created
+per-entity luaentity table, meaning its fields will be shared between
+all instances of an entity.
+
+```lua
+{
+	on_activate = function (self)
+	end,
+	on_deactivate = function (self),
+	end,
+	on_step = function (self, dtime, moveresult, params)
+	end,
+	name = "...",
+}
+```
+
+on_activate is called when this object is loaded by the client, and
+on_deactivate is called once it is deactivated.  on_step is much akin
+to the on_step of server side objects, but params contains the
+position of the object prior to the globalstep in order that objects
+may override the engine's default velocity integration entirely.
 
 ### LocalPlayer
 An interface to retrieve information about the player and override its mechanics.

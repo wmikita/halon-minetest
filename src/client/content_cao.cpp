@@ -40,6 +40,7 @@
 #include <IMeshBuffer.h>
 #include <CMeshBuffer.h>
 #include "scripting_client.h"
+#include "script/common/c_content.h"
 
 
 
@@ -288,6 +289,8 @@ bool GenericCAO::collideWithObjects() const
 void GenericCAO::initialize(const std::string &data)
 {
 	processInitData(data);
+	if (m_registered)
+	  call_on_activate ();
 }
 
 void GenericCAO::processInitData(const std::string &data)
@@ -333,11 +336,33 @@ void GenericCAO::processInitData(const std::string &data)
 	pos_translator.init(m_position);
 	rot_translator.init(m_rotation);
 	updateNodePos();
+	registerLuaEntity ();
 }
 
 GenericCAO::~GenericCAO()
 {
+	if (m_registered)
+	  {
+	    call_on_deactivate ();
+	    removeLuaEntity ();
+	  }
 	removeFromScene(true);
+}
+
+void
+GenericCAO::registerLuaEntity (void)
+{
+  ClientScripting *iface = m_env->getScript ();
+  if (iface && iface->create_lua_entity (this, m_name.data ()))
+    m_registered = true;
+}
+
+void
+GenericCAO::removeLuaEntity (void)
+{
+  ClientScripting *iface = m_env->getScript ();
+  if (iface)
+    iface->remove_lua_entity (this);
 }
 
 bool GenericCAO::getSelectionBox(aabb3f *toset) const
@@ -957,6 +982,35 @@ void GenericCAO::updateNametag()
 	}
 }
 
+void
+GenericCAO::call_on_step (float dtime, v3f &old_pos, v3f &old_vel,
+			  collisionMoveResult *moveresult)
+{
+  ClientScripting *script = m_env->getScript ();
+  if (script)
+    {
+      v3f pos = old_pos / BS;
+      v3f vel = old_vel / BS;
+      script->luaentity_on_step (this, dtime, pos, vel, moveresult);
+    }
+}
+
+void
+GenericCAO::call_on_activate (void)
+{
+  ClientScripting *script = m_env->getScript ();
+  if (script)
+    script->luaentity_on_activate (this);  
+}
+
+void
+GenericCAO::call_on_deactivate (void)
+{
+  ClientScripting *script = m_env->getScript ();
+  if (script)
+    script->luaentity_on_deactivate (this);  
+}
+
 void GenericCAO::updateNodePos()
 {
 	if (getParent() != NULL)
@@ -1092,15 +1146,20 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 	// Attachments should be glued to their parent by Irrlicht.
 	if(getParent() != NULL)
 	{
+		v3f old_position = m_position;
 		// Set these for later
 		m_position = getPosition();
 		m_velocity = v3f(0,0,0);
 		m_acceleration = v3f(0,0,0);
+		if (m_registered)
+		  call_on_step (dtime, old_position, m_velocity, NULL);
 		pos_translator.val_current = m_position;
 		pos_translator.val_target = m_position;
 	} else {
 		rot_translator.translate(dtime);
 		v3f lastpos = pos_translator.val_current;
+		v3f old_position = m_position;
+		v3f old_velocity = m_velocity;
 		if(m_prop.physical)
 		{
 			aabb3f box = m_prop.collisionbox;
@@ -1117,11 +1176,16 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 			m_position = p_pos;
 			m_velocity = p_velocity;
 
+			if (m_registered)
+			  call_on_step (dtime, old_position, old_velocity, &moveresult);
+
 			bool is_end_position = moveresult.collides;
 			pos_translator.update(m_position, is_end_position, dtime);
 		} else {
 			m_position += dtime * m_velocity + 0.5 * dtime * dtime * m_acceleration;
 			m_velocity += dtime * m_acceleration;
+			if (m_registered)
+			  call_on_step (dtime, old_position, old_velocity, NULL);
 			pos_translator.update(m_position, pos_translator.aim_is_end,
 					pos_translator.anim_time);
 		}
@@ -1587,12 +1651,24 @@ void GenericCAO::processMessage(const std::string &data)
 	} else if (cmd == AO_CMD_UPDATE_POSITION) {
 		// Not sent by the server if this object is an attachment.
 		// We might however get here if the server notices the object being detached before the client.
-		m_position = readV3F32(is);
-		m_velocity = readV3F32(is);
+	  	v3f *position = (!m_position_overridden
+				 ? &m_position
+				 : &m_server_position);
+	  	v3f *velocity = (!m_velocity_overridden
+				 ? &m_velocity
+				 : &m_server_velocity);
+		*position = readV3F32(is);
+		*velocity = readV3F32(is);
 		m_acceleration = readV3F32(is);
-		m_rotation = readV3F32(is);
 
-		m_rotation = wrapDegrees_0_360_v3f(m_rotation);
+		if (!m_rotation_overridden)
+		  {
+		    m_rotation = readV3F32 (is);
+		    m_rotation = wrapDegrees_0_360_v3f (m_rotation);
+		  }
+		else
+		  m_server_rotation = readV3F32 (is);
+
 		bool do_interpolate = readU8(is);
 		bool is_end_position = readU8(is);
 		float update_interval = readF32(is);
@@ -1600,15 +1676,19 @@ void GenericCAO::processMessage(const std::string &data)
 		if(getParent() != NULL) // Just in case
 			return;
 
-		if(do_interpolate)
-		{
-			if(!m_prop.physical)
-				pos_translator.update(m_position, is_end_position, update_interval);
-		} else {
-			pos_translator.init(m_position);
-		}
-		rot_translator.update(m_rotation, false, update_interval);
-		updateNodePos();
+		if (!m_position_overridden)
+		  {
+		    if(do_interpolate)
+		    {
+			    if(!m_prop.physical)
+				    pos_translator.update(m_position, is_end_position, update_interval);
+		    } else {
+			    pos_translator.init(m_position);
+		    }
+		    updateNodePos();
+		  }
+		if (!m_rotation_overridden)
+		  rot_translator.update(m_rotation, false, update_interval);
 	} else if (cmd == AO_CMD_SET_TEXTURE_MOD) {
 		std::string mod = deSerializeString16(is);
 
@@ -2114,6 +2194,25 @@ GenericCAO::setBoneOverride (std::string bone, BoneOverride *props)
 	  else
 	    m_bone_override[bone] = it->second.m_server_value;
 	}
+    }
+}
+
+void
+GenericCAO::overrideRotation (v3f *rot)
+{
+  if (!rot && m_rotation_overridden)
+    {
+      m_rotation_overridden = false;
+      m_rotation = wrapDegrees_0_360_v3f (m_server_rotation);
+      rot_translator.init (m_rotation);
+    }
+  else if (rot)
+    {
+      if (!m_rotation_overridden)
+	m_server_rotation = m_rotation;
+      m_rotation_overridden = true;
+      m_rotation = wrapDegrees_0_360_v3f (*rot);
+      rot_translator.init (m_rotation);
     }
 }
 

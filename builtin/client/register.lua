@@ -23,3 +23,18 @@ core.registered_on_inventory_open, core.register_on_inventory_open = make_regist
 core.registered_on_teleport_localplayer, core.register_on_teleport_localplayer = make_registration ()
 core.registered_on_localplayer_object_available, core.register_on_localplayer_object_available = make_registration ()
 
+core.registered_entities = {}
+
+function core.register_entity(name, prototype)
+	-- Check name
+	if name == nil then
+		error("Unable to register entity: Name is nil")
+	end
+
+	prototype.name = name
+	prototype.__index = prototype  -- so that it can be used as a metatable
+
+	-- Add to core.registered_entities
+	core.registered_entities[name] = prototype
+	prototype.mod_origin = core.get_current_modname() or "??"
+end

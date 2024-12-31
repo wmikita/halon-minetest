@@ -57,6 +57,42 @@ private:
 
   // set_bone_override (bone, value)
   static int l_set_bone_override (lua_State *);
+
+  // get_attach ()
+  static int l_get_attach (lua_State *);
+
+  // set_velocity (vel)
+  static int l_set_velocity (lua_State *);
+
+  // get_velocity (vel)
+  static int l_get_velocity (lua_State *);
+
+  // set_position (pos)
+  static int l_set_pos (lua_State *);
+
+  // get_position ()
+  static int l_get_pos (lua_State *);
+
+  // get_luaentity ()
+  static int l_get_luaentity (lua_State *);
+
+  // get_yaw ()
+  static int l_get_yaw (lua_State *);
+
+  // set_yaw (yaw)
+  static int l_set_yaw (lua_State *);
+
+  // get_rotation ()
+  static int l_get_rotation (lua_State *);
+
+  // set_rotation (rot)
+  static int l_set_rotation (lua_State *);
+
+  // get_id ()
+  static int l_get_id (lua_State *);
+
+  // collision_move (velocity, dtime)
+  static int l_collision_move (lua_State *);
 };
 
 #endif /* !L_CLIENT_OBJECT_H */

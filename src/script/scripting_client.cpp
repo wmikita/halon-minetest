@@ -44,6 +44,9 @@ ClientScripting::ClientScripting(Client *client):
 	lua_newtable (L);
 	lua_setfield (L, -2, "client_object_refs");
 
+	lua_newtable (L);
+	lua_setfield (L, -2, "luaentities");
+
 	InitializeModApi(L, top);
 	lua_pop(L, 1);
 

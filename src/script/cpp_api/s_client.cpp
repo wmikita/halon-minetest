@@ -365,6 +365,147 @@ ScriptApiClient::removeClientObjectReference (ClientActiveObject *cao)
   lua_settop (L, top);
 }
 
+bool
+ScriptApiClient::create_lua_entity (ClientActiveObject *cao, const char *name)
+{
+  SCRIPTAPI_PRECHECKHEADER
+  int top = lua_gettop (L);
+
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "registered_entities");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, name);
+
+  if (!lua_isnil (L, -1))
+    {
+      luaL_checktype (L, -1, LUA_TTABLE);
+
+      /* Create the entity and set its metatable.  */
+      lua_newtable (L);
+      lua_insert (L, -2);
+      lua_setmetatable (L, -2);
+
+      /* Configure its name and object reference.  */
+      lua_pushstring (L, name);
+      lua_setfield (L, -2, "name");
+      ClientObjectRef::clientObjectRefGetOrCreate (L, cao);
+      lua_setfield (L, -2, "object");
+
+      /* Save this into core.luaentities.  */
+      lua_getfield (L, top + 1, "luaentities");
+      assert (!lua_isnil (L, -1));
+      luaL_checktype (L, -1, LUA_TTABLE);
+      lua_pushinteger (L, cao->getId ());
+      lua_pushvalue (L, -3);
+      lua_settable (L, -3);
+      lua_settop (L, top);
+      return true;
+    }
+
+  lua_settop (L, top);
+  return false;
+}
+
+void
+ScriptApiClient::remove_lua_entity (ClientActiveObject *obj)
+{
+  SCRIPTAPI_PRECHECKHEADER
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "luaentities");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushinteger (L, obj->getId ());
+  lua_pushnil (L);
+  lua_settable (L, -3);
+  lua_pop (L, 2);
+}
+
+void
+ScriptApiClient::luaentity_on_step (ClientActiveObject *obj, float dtime,
+				    v3f &old_pos, v3f &old_vel,
+				    collisionMoveResult *moveresult)
+{
+  SCRIPTAPI_PRECHECKHEADER;
+  ScopeProfiler sp (g_profiler, "Client: LuaEntity on_step callback", SPT_ADD, PRECISION_MICRO);
+  int error_handler = PUSH_ERROR_HANDLER (L);
+  int top = lua_gettop (L);
+
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "luaentities");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushinteger (L, obj->getId ());
+  lua_gettable (L, -2);
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "on_step");
+  if (!lua_isnil (L, -1))
+    {
+      luaL_checktype (L, -1, LUA_TFUNCTION);
+      lua_pushvalue (L, -2); /* self */
+      lua_pushnumber (L, (double) dtime); /* dtime */
+      if (moveresult)
+	push_collision_move_result (L, *moveresult, true); /* moveresult */
+      else
+	lua_pushnil (L);
+      lua_newtable (L); /* params */
+      push_v3f (L, old_pos);
+      lua_setfield (L, -2, "old_position");
+      push_v3f (L, old_vel);
+      lua_setfield (L, -2, "old_velocity");
+      PCALL_RES (lua_pcall (L, 4, 0, error_handler));
+    }
+  lua_settop (L, top);
+}
+
+void
+ScriptApiClient::luaentity_on_activate (ClientActiveObject *obj)
+{
+  SCRIPTAPI_PRECHECKHEADER;
+  int error_handler = PUSH_ERROR_HANDLER (L);
+  int top = lua_gettop (L);
+
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "luaentities");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushinteger (L, obj->getId ());
+  lua_gettable (L, -2);
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "on_activate");
+  if (!lua_isnil (L, -1))
+    {
+      luaL_checktype (L, -1, LUA_TFUNCTION);
+      lua_pushvalue (L, -2); /* self */
+      PCALL_RES (lua_pcall (L, 1, 0, error_handler));
+    }
+  lua_settop (L, top);
+}
+
+void
+ScriptApiClient::luaentity_on_deactivate (ClientActiveObject *obj)
+{
+  SCRIPTAPI_PRECHECKHEADER;
+  int error_handler = PUSH_ERROR_HANDLER (L);
+  int top = lua_gettop (L);
+
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "luaentities");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushinteger (L, obj->getId ());
+  lua_gettable (L, -2);
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "on_deactivate");
+  if (!lua_isnil (L, -1))
+    {
+      luaL_checktype (L, -1, LUA_TFUNCTION);
+      lua_pushvalue (L, -2); /* self */
+      PCALL_RES (lua_pcall (L, 1, 0, error_handler));
+    }
+  lua_settop (L, top);
+}
+
 // Local Variables:
 // c-noise-macro-names: ("SCRIPTAPI_PRECHECKHEADER")
 // End:

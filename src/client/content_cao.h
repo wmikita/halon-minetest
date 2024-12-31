@@ -81,6 +81,7 @@ struct ClientBoneOverride : BoneOverride
 };
 
 typedef std::unordered_map<std::string, ClientBoneOverride> ClientBoneOverrideMap;
+struct collisionMoveResult;
 
 class GenericCAO : public ClientActiveObject
 {
@@ -118,7 +119,13 @@ private:
 	v3f m_velocity;
 	v3f m_acceleration;
 	v3f m_rotation;
+	v3f m_server_rotation;
 	u16 m_hp = 1;
+	bool m_position_overridden = false;
+	bool m_velocity_overridden = false;
+	bool m_rotation_overridden = false;
+	v3f m_server_position;
+	v3f m_server_velocity;
 	SmoothTranslator<v3f> pos_translator;
 	SmoothTranslatorWrappedv3f rot_translator;
 
@@ -165,9 +172,15 @@ private:
 	std::string m_current_texture_modifier = "";
 	float m_step_distance_counter = 0.0f;
 	ObjectPropertyOverrides m_prop_overrides;
+	bool m_registered = false;
 
 	bool visualExpiryRequired(const ObjectProperties &newprops) const;
 	void applyObjectPropertyOverrides (void);
+	void registerLuaEntity (void);
+	void removeLuaEntity (void);
+	void call_on_activate (void);
+	void call_on_deactivate (void);
+	void call_on_step (float, v3f &, v3f &, collisionMoveResult *);
 
 public:
 
@@ -327,6 +340,44 @@ public:
 	void overrideObjectProperties (ObjectProperties, int);
 	void clearPropertyOverrides (int);
 	void setBoneOverride (std::string, BoneOverride *);
+
+	inline void
+	setVelocityOverride (v3f *v)
+	{
+	  if (v)
+	    {
+	      if (!m_velocity_overridden)
+		m_server_velocity = m_velocity;
+	      m_velocity = *v;
+	      m_velocity_overridden = true;
+	    }
+	  else
+	    {
+	      if (m_velocity_overridden)
+		m_velocity = m_server_velocity;
+	      m_velocity_overridden = false;
+	    }
+	};
+
+	inline void
+	setPositionOverride (v3f *pos)
+        {
+	  if (pos)
+	    {
+	      if (!m_position_overridden)
+		m_server_position = m_position;
+	      m_position = *pos;
+	      m_position_overridden = true;
+	    }
+	  else
+	    {
+	      if (m_position_overridden)
+		m_position = m_server_position;
+	      m_position_overridden = false;
+	    }
+	}
+
+	void overrideRotation (v3f *);
 
 private:
 

@@ -218,9 +218,6 @@ LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
   PlayerSettings &player_settings = getPlayerSettings();
   ScopeProfiler sp (g_profiler, "Client: luaMove", SPT_MAX, PRECISION_MICRO);
 
-  if (getParent ())
-    return false;
-
   /* Integrate the previous velocity and push moveresults.
      moveresults is nil if noclip is enabled.  */
 
@@ -234,7 +231,14 @@ LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
   /* Push dtime.  */
   lua_pushnumber (L, dtime);
 
-  if (free_move && noclip)
+  if (getParent ())
+    {
+      setPosition (m_cao->getPosition());
+      m_added_velocity = v3f (0.0f); // ignored
+      /* Push moveresult.  */
+      lua_pushnil (L);
+    }
+  else if (free_move && noclip)
     {
       /* Integrate the velocity without collision detection or
 	 server-sent velocity updates.  */

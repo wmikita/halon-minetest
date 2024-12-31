@@ -54,4 +54,10 @@ public:
 	bool callOnMove (LocalPlayer *, f32, Environment *,
 			 std::vector<CollisionInfo> *);
 	void removeClientObjectReference (ClientActiveObject *);
+	bool create_lua_entity (ClientActiveObject *, const char *);
+	void remove_lua_entity (ClientActiveObject *);
+	void luaentity_on_activate (ClientActiveObject *);
+	void luaentity_on_deactivate (ClientActiveObject *);
+	void luaentity_on_step (ClientActiveObject *, float, v3f &,
+				v3f &, collisionMoveResult *);
 };
