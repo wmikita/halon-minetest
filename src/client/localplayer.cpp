@@ -243,6 +243,7 @@ LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
       /* Integrate the velocity without collision detection or
 	 server-sent velocity updates.  */
       position += m_speed * dtime;
+      m_added_velocity = v3f (0.0f);
       setPosition (position);
       /* Push moveresult.  */
       lua_pushnil (L);
@@ -253,7 +254,7 @@ LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
       float player_stepheight
 	= ((m_cao == nullptr) ? 0.0f : m_cao->getStepHeight ());
 
-      m_speed += m_added_velocity;
+      old_speed = (m_speed += m_added_velocity);
       m_added_velocity = v3f (0.0f);
       result = collisionMoveSimple (env, m_client, m_collisionbox,
 				    player_stepheight, dtime,
