@@ -235,7 +235,7 @@ ClientObjectRef::l_set_pos (lua_State *L)
     return 0;
 
   if (lua_isnil (L, 2))
-    cao->setVelocityOverride (NULL);
+    cao->setPositionOverride (NULL);
   else
     {
       v3f v = check_v3f (L, 2) * BS;
