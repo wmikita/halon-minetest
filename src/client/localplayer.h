@@ -7,7 +7,10 @@
 #include "player.h"
 #include "constants.h"
 #include "lighting.h"
+extern "C"
+{
 #include <lua.h>
+}
 #include <string>
 
 class Client;
