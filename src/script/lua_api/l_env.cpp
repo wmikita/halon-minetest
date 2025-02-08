@@ -60,9 +60,8 @@ int LuaRaycast::l_next(lua_State *L)
 	GET_PLAIN_ENV_PTR;
 	ServerEnvironment *senv = dynamic_cast<ServerEnvironment*>(env);
 
-	bool csm = false;
 #if CHECK_CLIENT_BUILD()
-	csm = getClient(L) != nullptr;
+	ClientEnvironment *csm = dynamic_cast<ClientEnvironment *> (env);
 #endif
 
 	LuaRaycast *o = checkObject<LuaRaycast>(L, 1);

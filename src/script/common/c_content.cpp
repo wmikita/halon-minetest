@@ -21,6 +21,10 @@
 #include "server/player_sao.h"
 #include "util/pointedthing.h"
 #include "debug.h" // For FATAL_ERROR
+#if CHECK_CLIENT_BUILD ()
+#include "client/clientenvironment.h"
+#include "lua_api/l_client_object.h"
+#endif /* CHECK_CLIENT_BUILD () */
 #include <SColor.h>
 #include <json/json.h>
 #include "mapgen/treegen.h"
@@ -2407,8 +2411,8 @@ void read_json_value(lua_State *L, Json::Value &root, int index, u16 max_depth)
 	lua_pop(L, 1); // Pop value
 }
 
-void push_pointed_thing(lua_State *L, const PointedThing &pointed, bool csm,
-	bool hitpoint)
+void push_pointed_thing(lua_State *L, const PointedThing &pointed,
+			ClientEnvironment *csm, bool hitpoint)
 {
 	lua_newtable(L);
 	if (pointed.type == POINTEDTHING_NODE) {
@@ -2425,6 +2429,17 @@ void push_pointed_thing(lua_State *L, const PointedThing &pointed, bool csm,
 		if (csm) {
 			lua_pushinteger(L, pointed.object_id);
 			lua_setfield(L, -2, "id");
+#if CHECK_CLIENT_BUILD ()
+			{
+			  ClientActiveObject *cao
+			    = csm->getActiveObject (pointed.object_id);
+			  if (cao)
+			    {
+			      ClientObjectRef::clientObjectRefGetOrCreate (L, cao);
+			      lua_setfield (L, -2, "ref");
+			    }
+			}
+#endif /* CHECK_CLIENT_BUILD */
 		} else {
 			push_objectRef(L, pointed.object_id);
 			lua_setfield(L, -2, "ref");

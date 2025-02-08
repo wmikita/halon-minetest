@@ -543,6 +543,56 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 		wield_position.X -= std::sin(bobfrac*M_PI*2.0) * 3.0;
 		wield_position.Y += std::sin(my_modf(bobfrac*2.0)*M_PI) * 3.0;
 	}
+
+	if (m_wieldmesh_transition_active)
+	  {
+	    v3f old_rot, old_pos;
+	    v3f new_rot, new_pos;
+	    f32 progress = std::min (m_trans_delta / m_wieldmesh_transition_time, 1.0f);
+	    m_trans_delta += frametime;
+
+	    old_rot = m_initial_wieldmesh_rotation;
+	    old_pos = m_initial_wieldmesh_position;
+
+	    /* Transition between the locally provided value and the
+	       default, or vice versa, as the case may be.  */
+	    if (m_wieldmesh_overridden)
+	      {
+		new_pos = m_local_wieldmesh_position;
+		new_rot = m_local_wieldmesh_rotation;
+	      }
+	    else
+	      {
+		new_pos = wield_position;
+		new_rot = wield_rotation;
+	      }
+
+	    {
+	      core::quaternion quat_begin (old_rot * core::DEGTORAD);
+	      core::quaternion quat_end (new_rot * core::DEGTORAD);
+	      core::quaternion quat_slerp;
+	      wield_position.X
+		= old_pos.X + (new_pos.X - old_pos.X) * progress;
+	      wield_position.Y
+		= old_pos.Y + (new_pos.Y - old_pos.Y) * progress;
+	      wield_position.Z
+		= old_pos.Z + (new_pos.Z - old_pos.Z) * progress;
+
+	      quat_slerp.slerp (quat_begin, quat_end, progress);
+	      quat_slerp.toEuler (wield_rotation);
+	      wield_rotation *= core::RADTODEG;
+	    }
+
+	    /* Abort the transition once it completes.  */
+	    if (progress == 1.0)
+	      m_wieldmesh_transition_active = false;
+	  }
+	else if (m_wieldmesh_overridden)
+	  {
+	    wield_rotation = m_local_wieldmesh_rotation;
+	    wield_position = m_local_wieldmesh_position;
+	  }
+
 	m_wieldnode->setPosition(wield_position);
 	m_wieldnode->setRotation(wield_rotation);
 
@@ -758,4 +808,45 @@ std::array<core::plane3d<f32>, 4> Camera::getFrustumCullPlanes() const
 		frustum_planes[SViewFrustum::VF_BOTTOM_PLANE],
 		frustum_planes[SViewFrustum::VF_TOP_PLANE],
 	};
+}
+
+void
+Camera::overrideWieldmesh (v3f *position, v3f *rotation, f32 transition_time)
+{
+  m_local_wieldmesh_position = *position;
+  m_local_wieldmesh_rotation = *rotation;
+  m_wieldmesh_overridden = true;
+
+  if (transition_time > 0.0)
+    {
+      v3f old_pos = m_wieldnode->getPosition ();
+      v3f old_rot = m_wieldnode->getRotation ();
+
+      m_wieldmesh_transition_time = transition_time;
+      m_trans_delta = 0.0;
+      m_wieldmesh_transition_active = true;
+      m_initial_wieldmesh_position = old_pos;
+      m_initial_wieldmesh_rotation = old_rot;
+    }
+  else
+    m_wieldmesh_transition_active = false;
+}
+
+void
+Camera::resetWieldmeshOverride (f32 transition_time)
+{
+  m_wieldmesh_overridden = false;
+  m_wieldmesh_transition_active = false;
+  m_trans_delta = 0.0;
+
+  if (transition_time > 0.0)
+    {
+      v3f old_pos = m_wieldnode->getPosition ();
+      v3f old_rot = m_wieldnode->getRotation ();
+
+      m_wieldmesh_transition_active = true;
+      m_wieldmesh_transition_time = transition_time;
+      m_initial_wieldmesh_position = old_pos;
+      m_initial_wieldmesh_rotation = old_rot;
+    }
 }

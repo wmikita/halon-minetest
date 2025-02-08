@@ -51,6 +51,20 @@ ClientObjectRef::l_is_valid (lua_State *L)
   return 1;
 }
 
+int
+ClientObjectRef::l_get_name (lua_State *L)
+{
+  ClientObjectRef *obj = checkObject<ClientObjectRef> (L, 1);
+  GenericCAO *cao = getgenericcao (obj);
+
+  if (cao)
+    lua_pushstring (L, cao->getName ().c_str ());
+  else
+    lua_pushnil (L);
+
+  return 1;
+}
+
 static int
 parse_property_override_table (lua_State *L, ObjectProperties *props)
 {
@@ -418,6 +432,7 @@ ClientObjectRef::Register(lua_State *L)
 const char ClientObjectRef::className[] = "ClientObjectRef";
 luaL_Reg ClientObjectRef::methods[] = {
   luamethod (ClientObjectRef, is_valid),
+  luamethod (ClientObjectRef, get_name),
   luamethod (ClientObjectRef, set_property_overrides),
   luamethod (ClientObjectRef, clear_property_overrides),
   luamethod (ClientObjectRef, get_properties),

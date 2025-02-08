@@ -213,6 +213,35 @@ LuaCamera::l_update_wield_item (lua_State *L)
   return 0;
 }
 
+// override_wieldmesh (pos, rot, transition_time)
+
+int
+LuaCamera::l_override_wieldmesh (lua_State *L)
+{
+  Camera *camera = getobject (L, 1);
+  v3f pos = readParam<v3f> (L, 2, v3f (0));
+  v3f rot = readParam<v3f> (L, 3, v3f (0));
+  f32 transition = readParam<float> (L, 4, 0.0f);
+
+  sanity_check (camera);
+  if (!camera)
+    return 0;
+
+  camera->overrideWieldmesh (&pos, &rot, std::max (0.0f, transition));
+  return 0;
+}
+
+// reset_wieldmesh_override (transition)
+
+int
+LuaCamera::l_reset_wieldmesh_override (lua_State *L)
+{
+  Camera *camera = getobject (L, 1);
+  f32 transition = readParam<float> (L, 2, 0.0f);
+  camera->resetWieldmeshOverride (std::max (0.0f, transition));
+  return 0;
+}
+
 Camera *LuaCamera::getobject(LuaCamera *ref)
 {
 	return ref->m_camera;
@@ -256,6 +285,8 @@ const luaL_Reg LuaCamera::methods[] = {
 	luamethod(LuaCamera, set_look_vertical),
 	luamethod(LuaCamera, set_look_horizontal),
 	luamethod(LuaCamera, update_wield_item),
+	luamethod (LuaCamera, override_wieldmesh),
+	luamethod (LuaCamera, reset_wieldmesh_override),
 
 	{0, 0}
 };

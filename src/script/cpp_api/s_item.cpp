@@ -262,6 +262,6 @@ void ScriptApiItem::pushPointedThing(const PointedThing &pointed, bool hitpoint)
 {
 	lua_State* L = getStack();
 
-	push_pointed_thing(L, pointed, false, hitpoint);
+	push_pointed_thing(L, pointed, NULL, hitpoint);
 }
 

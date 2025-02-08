@@ -158,13 +158,15 @@ void luaentity_get(lua_State *L,u16 id);
 bool push_json_value(lua_State *L, const Json::Value &value, int nullindex);
 void read_json_value(lua_State *L, Json::Value &root, int index, u16 max_depth);
 
+class ClientEnvironment;
+
 /*!
  * Pushes a Lua `pointed_thing` to the given Lua stack.
  * \param csm If true, a client side pointed thing is pushed
  * \param hitpoint If true, the exact pointing location is also pushed
  */
-void push_pointed_thing(lua_State *L, const PointedThing &pointed, bool csm =
-	false, bool hitpoint = false);
+void push_pointed_thing(lua_State *L, const PointedThing &pointed,
+			ClientEnvironment *env = NULL, bool hitpoint = false);
 
 void push_objectRef(lua_State *L, const u16 id);
 

@@ -181,6 +181,9 @@ public:
 
 	inline void addArmInertia(f32 player_yaw);
 
+	void overrideWieldmesh (v3f *, v3f *, f32);
+	void resetWieldmeshOverride (f32);
+
 private:
 	// Use getFrustumCuller().
 	// This helper just exists to decrease the header's number of includes.
@@ -224,6 +227,15 @@ private:
 	v2f m_cam_vel;
 	v2f m_cam_vel_old;
 	v2f m_last_cam_pos;
+
+	// CSM-provided wieldmesh rotation and position.
+	v3f m_initial_wieldmesh_rotation;
+	v3f m_initial_wieldmesh_position;
+	v3f m_local_wieldmesh_rotation;
+	v3f m_local_wieldmesh_position;
+	bool m_wieldmesh_overridden = false;
+	bool m_wieldmesh_transition_active = false;
+	f32 m_wieldmesh_transition_time, m_trans_delta;
 
 	// Field of view and aspect ratio stuff
 	f32 m_aspect = 1.0f;

@@ -40,6 +40,9 @@ private:
   // is_valid (self)
   static int l_is_valid (lua_State *);
 
+  // get_name (self)
+  static int l_get_name (lua_State *);
+
   // set_property_overrides (table)
   static int l_set_property_overrides (lua_State *);
 

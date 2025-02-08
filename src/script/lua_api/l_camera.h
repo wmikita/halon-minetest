@@ -31,6 +31,8 @@ private:
 	static int l_set_look_horizontal (lua_State *);
 	static int l_get_aspect_ratio(lua_State *L);
 	static int l_update_wield_item (lua_State *);
+	static int l_override_wieldmesh (lua_State *);
+	static int l_reset_wieldmesh_override (lua_State *);
 
 	static Camera *getobject(LuaCamera *ref);
 	static Camera *getobject(lua_State *L, int narg);

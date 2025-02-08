@@ -218,7 +218,7 @@ For helper functions see "Vector helpers".
 ### pointed_thing
 * `{type="nothing"}`
 * `{type="node", under=pos, above=pos}`
-* `{type="object", id=ObjectID}`
+* `{type="object", id=ObjectID, ref=LocalObject}`
 
 Flag Specifier Format
 ---------------------
@@ -687,6 +687,11 @@ Please do not try to access the reference until the camera is initialized, other
     * Returns yaw in radians
 * `get_aspect_ratio()`
     * Returns aspect ratio of screen
+* `override_wieldmesh (pos, rot, transition_time)`
+	* Override the wieldmesh's position and rotation in relation to
+      the camera with the provided transition time.
+* `reset_wieldmesh_override (transition_time)`
+	* Reset any existing wieldmesh overrides.
 
 ### LocalObject
 An interface to client-side active objects.  Player metadata is
@@ -694,6 +699,9 @@ divided between this interface and LocalPlayer.
 
 * `is_valid ()`
   Return whether this object is still valid.
+* `get_name ()`
+  If a player, return the name of the player.  Otherwise, return
+  the type of this LuaEntity.
 * `set_property_overrides(list)`
   Override the properties in the table provided client-side; at
   present, only textures, collisionbox, selectionbox, stepheight,
