@@ -589,11 +589,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			info.new_pos = *pos_f;
 			info.old_speed = old_speed_f;
 			info.new_speed = *speed_f;
-
-			if (is_collision) {
-				info.axis = nearest_collided;
-				result.collisions.push_back(std::move(info));
-			}
+			result.collisions.push_back(info);
 		}
 
 		if (dtime < BS * 1e-10f)
