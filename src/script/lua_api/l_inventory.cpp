@@ -494,7 +494,7 @@ InvRef::RegisterClient (lua_State *L)
     {"__gc", gc_object},
     {0, 0},
   };
-  registerClass (L, className, csm_methods, metamethods);
+  registerClass<InvRef> (L, csm_methods, metamethods);
 }
 
 #endif /* CHECK_CLIENT_BUILD () */

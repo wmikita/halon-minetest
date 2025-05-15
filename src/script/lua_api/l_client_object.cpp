@@ -426,7 +426,7 @@ ClientObjectRef::Register(lua_State *L)
     {"__gc", gc_object,},
     {0, 0,},
   };
-  registerClass (L, className, methods, metamethods);
+  registerClass<ClientObjectRef> (L, methods, metamethods);
 }
 
 const char ClientObjectRef::className[] = "ClientObjectRef";
