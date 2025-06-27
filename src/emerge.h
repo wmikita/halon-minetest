@@ -189,7 +189,7 @@ public:
 	bool isBlockUnderground(v3s16 blockpos);
 
 	/// @return min edge of chunk in block units
-	static v3s16 getContainingChunk(v3s16 blockpos, v3s16 chunksize);
+	static v3s16 getContainingChunk(v3s16, v3s16, v3s16);
 
 private:
 	void initThreads(bool should_multithread);

@@ -114,6 +114,7 @@ struct MapgenParams {
 
 	MapgenType mgtype = MAPGEN_DEFAULT;
 	v3s16 chunksize = v3s16(5);
+	v3s16 explicit_chunk_origin = v3s16 (1);
 	u64 seed = 0;
 	s16 water_level = 1;
 	s16 mapgen_limit = MAX_MAP_GENERATION_LIMIT;
@@ -122,6 +123,14 @@ struct MapgenParams {
 	u32 spflags = 0;
 
 	BiomeParams *bparams = nullptr;
+
+  inline v3s16 get_chunk_origin (void) const
+  {
+    return ((explicit_chunk_origin.X <= 0
+	     && explicit_chunk_origin.Y <= 0
+	     && explicit_chunk_origin.Z <= 0)
+	    ? explicit_chunk_origin : -chunksize / 2);
+  };
 
 	virtual void readParams(const Settings *settings);
 	virtual void writeParams(Settings *settings) const;

@@ -255,8 +255,9 @@ void TestMapSettingsManager::testMapMetaFailures()
 void TestMapSettingsManager::testChunks()
 {
 	v3s16 csize(5);
+	v3s16 zero_point (-2);
 
-#define GET(x) EmergeManager::getContainingChunk(x, csize)
+#define GET(x) EmergeManager::getContainingChunk(x, csize, zero_point)
 	// origin chunk goes from (-2, -2, -2) -> (3, 3, 3) excl
 	UASSERTEQ(auto, GET(v3s16(-2, -2, -2)), v3s16(-2, -2, -2));
 	UASSERTEQ(auto, GET(v3s16(0, 0, 0)), v3s16(-2, -2, -2));

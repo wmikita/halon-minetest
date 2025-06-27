@@ -1084,6 +1084,25 @@ void MapgenParams::readParams(const Settings *settings)
 		errorstream << "MapgenParams: invalid chunksize \"" << chunksize_str
 			<< "\"" << std::endl;
 	}
+	{
+	  std::string chunk_origin;
+
+	  if (settings->getNoEx ("chunk_origin", chunk_origin))
+	    {
+	      std::optional<v3f> origin = str_to_v3f (chunk_origin);
+	      if (origin.has_value ())
+		{
+		  if (origin->X > 0 || origin->Y > 0 || origin->Z > 0)
+		    errorstream << "MapgenParams: chunk origin " << *origin
+				<< "is invalid" << std::endl;
+		  explicit_chunk_origin.X = (int) origin->X % chunksize.X;
+		  explicit_chunk_origin.Y = (int) origin->Y % chunksize.Y;
+		  explicit_chunk_origin.Z = (int) origin->Z % chunksize.Z;
+		}
+	    }
+	  else
+	    explicit_chunk_origin = v3s16 (1);
+	}
 	// Finally check the volume limit
 	if (u32 v = chunksize.X * chunksize.Y * chunksize.Z; v > MAX_CHUNK_VOLUME) {
 		errorstream << "MapgenParams: chunksize " << chunksize
@@ -1115,6 +1134,8 @@ void MapgenParams::writeParams(Settings *settings) const
 	} else {
 		settings->setV3F("chunksize", v3f::from(chunksize));
 	}
+
+	settings->setV3F ("chunk_origin", v3f::from (get_chunk_origin ()));
 
 	if (bparams)
 		bparams->writeParams(settings);

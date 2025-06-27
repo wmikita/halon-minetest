@@ -201,7 +201,8 @@ bool ServerMap::initBlockMake(v3s16 blockpos, BlockMakeData *data)
 {
 	assert(data);
 	const v3s16 csize = getMapgenParams()->chunksize;
-	const v3s16 bpmin = EmergeManager::getContainingChunk(blockpos, csize);
+	v3s16 chunk_origin = getMapgenParams ()->get_chunk_origin ();
+	const v3s16 bpmin = EmergeManager::getContainingChunk(blockpos, csize, chunk_origin);
 	const v3s16 bpmax = bpmin + csize - v3s16(1);
 
 	if (!m_chunks_in_progress.insert(bpmin).second)

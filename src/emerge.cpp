@@ -336,9 +336,9 @@ bool EmergeManager::isBlockInQueue(v3s16 pos)
 //
 
 
-v3s16 EmergeManager::getContainingChunk(v3s16 blockpos, v3s16 chunksize)
+v3s16 EmergeManager::getContainingChunk(v3s16 blockpos, v3s16 chunksize, v3s16 zero_point)
 {
-	v3s16 chunk_offset = -chunksize / 2;
+	v3s16 chunk_offset = zero_point;
 
 	return getContainerPos(blockpos - chunk_offset, chunksize)
 		* chunksize + chunk_offset;
