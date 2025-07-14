@@ -84,6 +84,8 @@ inline v3f rangelimv(const v3f vec, const f32 low, const f32 high)
 }
 }
 
+#define COROLLARY_COLLISION_MARGIN (-2e-7f * BS)
+
 // Helper function:
 // Checks for collision of a moving aabbox with a static aabbox
 // Returns -1 if no collision, 0 if X collision, 1 if Y collision, 2 if Z collision
@@ -124,10 +126,10 @@ CollisionAxis axisAlignedCollision(
 				if (
 					(std::max(movingbox.MaxEdge.X + speed.X * time, staticbox.MaxEdge.X)
 						- std::min(movingbox.MinEdge.X + speed.X * time, staticbox.MinEdge.X)
-						- relbox.MinEdge.X < 0) &&
+						- relbox.MinEdge.X < COROLLARY_COLLISION_MARGIN) &&
 						(std::max(movingbox.MaxEdge.Z + speed.Z * time, staticbox.MaxEdge.Z)
 							- std::min(movingbox.MinEdge.Z + speed.Z * time, staticbox.MinEdge.Z)
-							- relbox.MinEdge.Z < 0)
+							- relbox.MinEdge.Z < COROLLARY_COLLISION_MARGIN)
 					)
 					return COLLISION_AXIS_Y;
 			}
@@ -152,10 +154,10 @@ CollisionAxis axisAlignedCollision(
 				if (
 					(std::max(movingbox.MaxEdge.Y + speed.Y * time, staticbox.MaxEdge.Y)
 						- std::min(movingbox.MinEdge.Y + speed.Y * time, staticbox.MinEdge.Y)
-						- relbox.MinEdge.Y < 0) &&
+						- relbox.MinEdge.Y < COROLLARY_COLLISION_MARGIN) &&
 						(std::max(movingbox.MaxEdge.Z + speed.Z * time, staticbox.MaxEdge.Z)
 							- std::min(movingbox.MinEdge.Z + speed.Z * time, staticbox.MinEdge.Z)
-							- relbox.MinEdge.Z < 0)
+							- relbox.MinEdge.Z < COROLLARY_COLLISION_MARGIN)
 					)
 					return COLLISION_AXIS_X;
 			}
@@ -179,10 +181,10 @@ CollisionAxis axisAlignedCollision(
 				if (
 					(std::max(movingbox.MaxEdge.X + speed.X * time, staticbox.MaxEdge.X)
 						- std::min(movingbox.MinEdge.X + speed.X * time, staticbox.MinEdge.X)
-						- relbox.MinEdge.X < 0) &&
+						- relbox.MinEdge.X < COROLLARY_COLLISION_MARGIN) &&
 						(std::max(movingbox.MaxEdge.Y + speed.Y * time, staticbox.MaxEdge.Y)
 							- std::min(movingbox.MinEdge.Y + speed.Y * time, staticbox.MinEdge.Y)
-							- relbox.MinEdge.Y < 0)
+							- relbox.MinEdge.Y < COROLLARY_COLLISION_MARGIN)
 					)
 					return COLLISION_AXIS_Z;
 			}
