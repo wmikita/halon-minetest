@@ -387,6 +387,9 @@ Call these functions only at load time!
     * Called when the local player open inventory
     * Newest functions are called first
     * If any function returns true, inventory doesn't open
+* `core.register_on_teleport_localplayer (function (new_pos))`
+    * Called when the player is teleported by the server, with NEW_POS
+      as the new position.
 ### Sounds
 * `core.sound_play(spec, parameters)`: returns a handle
     * `spec` is a `SimpleSoundSpec`
@@ -467,6 +470,9 @@ Call these functions only at load time!
     * get level of leveled node (water, snow)
 * `core.get_node_max_level(pos)`
     * get max available level for leveled node
+* `core.collides (aabb3f, pos, collide_with_objects, self_object, no_grazing)`
+    * Return whether the provided AABB intersects with the level,
+	  excepting self_object.
 
 ### Player
 * `core.send_chat_message(message)`
@@ -477,6 +483,9 @@ Call these functions only at load time!
     * Clears the out chat queue
 * `core.localplayer`
     * Reference to the LocalPlayer object. See [`LocalPlayer`](#localplayer) class reference for methods.
+* `core.register_on_localplayer_object_available (cb)`
+    * Register a callback to be invokved once core.localplayer's
+      LocalObject handle is available.
 
 ### Privileges
 * `core.get_privilege_list()`
@@ -660,6 +669,9 @@ Please do not try to access the reference until the camera is initialized, other
     * Returns position of camera with view bobbing
 * `get_offset()`
     * Returns eye offset vector
+* `set_offset(offset)`:
+    * Override camera offset vectors.  Pass nil to revert to
+	  server-provided values.
 * `get_look_dir()`
     * Returns eye direction unit vector
 * `get_look_vertical()`
@@ -669,8 +681,30 @@ Please do not try to access the reference until the camera is initialized, other
 * `get_aspect_ratio()`
     * Returns aspect ratio of screen
 
+### LocalObject
+An interface to client-side active objects.  Player metadata is
+divided between this interface and LocalPlayer.
+
+* `is_valid ()`
+  Return whether this object is still valid.
+* `set_property_overrides(list)`
+  Override the properties in the table provided client-side; at
+  present, only textures, collisionbox, selectionbox, stepheight,
+  eye_height, and zoom_fov, admit of overriding.
+* `clear_property_overrides(list)`
+  Reset overriden properties in list to their default values.
+* `get_properties()`: Returns a table of all object properties.
+* `set_animation(frame_range, frame_blend, frame_loop)`:
+  Configure the current animation, as in ObjectRefs.  This animation
+  takes precedence over any animations specified by the server and may
+  be reset by specifying a range arg of nil.
+* `set_animation_frame_speed(speed)`: Override the animation speed
+  specified by the server.  This speed may be reset by specifying a
+  speed arg of nil.
+* `set_bone_override(bone, override)`: As in lua_api.md.
+
 ### LocalPlayer
-An interface to retrieve information about the player.
+An interface to retrieve information about the player and override its mechanics.
 This object will only be available after the client is initialized. Earlier accesses will yield a `nil` value.
 
 Methods:
@@ -791,6 +825,8 @@ Methods:
             zoom = boolean,
             dig = boolean,
             place = boolean,
+			yaw = number,
+			pitch = number,
         }
         ```
 
@@ -811,6 +847,63 @@ Methods:
     * change a value of a previously added HUD element
     * element `stat` values: `position`, `name`, `scale`, `text`, `number`, `item`, `dir`
     * Returns `true` on success, otherwise returns `nil`
+
+* `set_look_horizontal(yaw)`
+* `set_look_vertical(pitch)`
+	* Configure the yaw and pitch of the player's viewport.
+	
+* `set_player_callbacks(callbacks)`
+	* Define a number of callbacks to be executed on every global
+      step.  callbacks should be a table of the form:
+	  
+	  ```lua
+	  {
+		  on_step = function (dtime, moveresult, params) end,
+		  -- Called on every client-side globalstep.  If set,
+		  -- it inhibits the execution of any physics-related
+		  -- code besides collision detection and is expected to:
+		  --
+		  --  Adjust the velocity of the player according to
+		  --  its physical attributes, environment, and player
+		  --  input, whilst applying other forces such as drag.
+		  --
+		  --  Implement crouching and automatic jumping.
+		  --
+		  --  Call the camera's set_look_vertical and set_look_horizontal
+		  --  according to the values returned by get_control.
+		  --
+		  --  Call set_touching_ground to decide whether the player is
+		  --  in contact with the ground and the likes of view bobbing
+		  --  should be enabled.
+		  --
+		  -- moveresult is nil if params.noclip is set.
+	  }
+	  ```
+
+* `set_velocity(v)`
+	* Set the velocity to be applied before the next call to on\_move.
+	  This is only effective when an on\_move callback is defined.
+* `set_pos(pos)`
+	* Move the player to this location immediately.
+	  
+* `get_object(v)`
+	* Return a LocalObject reference corresponding to this player.
+
+* `get_fov()`
+	* Return the FOV override currently in effect.  This is the override
+	specified by the server or by a call to set_fov.
+* `set_fov(fov, is_multiplier, transition_time)`: Sets player's FOV.
+	An FOV of nil clears the client-side override.
+	
+* `collision_move(pos, v, dtime)`: Simulate movement along the vector V
+  from POS for a duration of DTIME.  Return a new position, vector,
+  and collision information table without applying any of these
+  values.  This is largely useful for Lua motion functions that
+  attempt to implement a fixed physics dtime.
+
+* `set_touching_ground(touching_ground)`: Configure whether the player
+  is touching the ground.  This is important for view bobbing, amongst
+  other things.
 
 ### Settings
 An interface to read config files in the format of `minetest.conf`.

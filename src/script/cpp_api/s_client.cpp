@@ -11,6 +11,18 @@
 #include "lua_api/l_item.h"
 #include "itemdef.h"
 #include "s_item.h"
+#include "client/localplayer.h"
+#include "lua_api/l_client_object.h"
+#include "profiler.h"
+
+ScriptApiClient::~ScriptApiClient ()
+{
+  if (getEnv ())
+    {
+      ClientEnvironment *env = static_cast<ClientEnvironment *> (getEnv ());
+      env->setScript (nullptr);
+    }
+}
 
 void ScriptApiClient::on_mods_loaded()
 {
@@ -232,7 +244,104 @@ bool ScriptApiClient::on_inventory_open(Inventory *inventory)
 	return readParam<bool>(L, -1);
 }
 
+void
+ScriptApiClient::on_teleport_localplayer (const v3f &new_pos)
+{
+  SCRIPTAPI_PRECHECKHEADER
+
+  lua_getglobal (L, "core");
+  lua_getfield (L, -1, "registered_on_teleport_localplayer");
+  push_v3f (L, new_pos);
+  try
+    {
+      runCallbacks (1, RUN_CALLBACKS_MODE_OR);
+    }
+  catch (LuaError &e)
+    {
+      getClient()->setFatalError (e);
+    }
+}
+
+void
+ScriptApiClient::on_localplayer_object_available (void)
+{
+  SCRIPTAPI_PRECHECKHEADER
+  lua_getglobal (L, "core");
+  lua_getfield (L, -1, "registered_on_localplayer_object_available");
+  try
+    {
+      runCallbacks (0, RUN_CALLBACKS_MODE_OR);
+    }
+  catch (LuaError &e)
+    {
+      getClient ()->setFatalError (e);
+      return;
+    }
+}
+
 void ScriptApiClient::setEnv(ClientEnvironment *env)
 {
 	ScriptApiBase::setEnv(env);
 }
+
+bool
+ScriptApiClient::callOnMove (LocalPlayer *player, f32 dtime, Environment *env,
+			     std::vector<CollisionInfo> *collision_info)
+{
+  SCRIPTAPI_PRECHECKHEADER
+  int error_handler;
+
+  error_handler = PUSH_ERROR_HANDLER (L);
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_getfield (L, -1, "player_callbacks");
+
+  if (!lua_istable (L, -1))
+    return false;
+
+  lua_getfield (L, -1, "on_step");
+  if (lua_isnil (L, -1))
+    return false;
+  luaL_checktype (L, -1, LUA_TFUNCTION);
+
+  /* Begin slimmed down `LocalPlayer->move'.  This is expected to push
+     dtime, moveresult, and flags.  */
+  if (!player->luaMove (L, dtime, env, collision_info))
+    return true;
+
+  {
+    ScopeProfiler sp (g_profiler, "Client: LocalPlayer on_step handler",
+		      SPT_AVG, PRECISION_MICRO);
+    PCALL_RES (lua_pcall (L, 3, 0, error_handler));
+  }
+  return true;
+}
+
+void
+ScriptApiClient::removeClientObjectReference (ClientActiveObject *cao)
+{
+  SCRIPTAPI_PRECHECKHEADER
+  int top;
+
+  assert (getType () == ScriptingType::Client);
+  top = lua_gettop (L);
+  lua_getglobal (L, "core");
+  lua_getfield (L, -1, "client_object_refs");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushinteger (L, cao->getId ());
+  lua_gettable (L, -2);
+
+  if (!lua_isnil (L, -1))
+    {
+      ClientObjectRef::set_null (L, (void *) cao);
+      lua_pushinteger (L, cao->getId ());
+      lua_pushnil (L);
+      lua_settable (L, -4);
+    }
+
+  lua_settop (L, top);
+}
+
+// Local Variables:
+// c-noise-macro-names: ("SCRIPTAPI_PRECHECKHEADER")
+// End:

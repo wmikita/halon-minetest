@@ -67,7 +67,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 ///          Touching faces are not counted as intersection.
 bool collision_check_intersection(Environment *env, IGameDef *gamedef,
 		const aabb3f &box_0, const v3f &pos_f, ActiveObject *self = nullptr,
-		bool collide_with_objects = true);
+		bool collide_with_objects = true, bool accept_perfect = true);
 
 // Helper function:
 // Checks for collision of a moving aabbox with a static aabbox

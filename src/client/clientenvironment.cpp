@@ -116,10 +116,19 @@ void ClientEnvironment::step(float dtime)
 
 	u32 steps = std::ceil(dtime / dtime_max_increment);
 	f32 dtime_part = dtime / steps;
+	bool lua_movement = false;
 	for (; steps > 0; --steps) {
 		/*
 			Local player handling
 		*/
+
+		if (m_client->modsLoaded ()
+		    && m_script->callOnMove (lplayer, dtime_part, this,
+					     &player_collisions))
+		  {
+		    lua_movement = true;
+		    continue;
+		  }
 
 		// Control local player
 		lplayer->applyControl(dtime_part, this);
@@ -191,39 +200,42 @@ void ClientEnvironment::step(float dtime)
 		player_fall_factor = 1.0f + (float)addp_p / 100.0f;
 	}
 
-	for (const CollisionInfo &info : player_collisions) {
-		v3f speed_diff = info.new_speed - info.old_speed;;
-		// Handle only fall damage
-		// (because otherwise walking against something in fast_move kills you)
-		if (speed_diff.Y < 0 || info.old_speed.Y >= 0)
-			continue;
-		// Get rid of other components
-		speed_diff.X = 0;
-		speed_diff.Z = 0;
-		f32 pre_factor = 1; // 1 hp per node/s
-		f32 tolerance = BS*14; // 5 without damage
-		if (info.type == COLLISION_NODE) {
-			const ContentFeatures &f = m_client->ndef()->
-				get(m_map->getNode(info.node_p));
-			// Determine fall damage modifier
-			int addp_n = itemgroup_get(f.groups, "fall_damage_add_percent");
-			// convert node group to an usable fall damage factor
-			f32 node_fall_factor = 1.0f + (float)addp_n / 100.0f;
-			// combine both player fall damage modifiers
-			pre_factor = node_fall_factor * player_fall_factor;
-		}
-		float speed = pre_factor * speed_diff.getLength();
+	if (!lua_movement)
+	  {
+	    for (const CollisionInfo &info : player_collisions) {
+		    v3f speed_diff = info.new_speed - info.old_speed;;
+		    // Handle only fall damage
+		    // (because otherwise walking against something in fast_move kills you)
+		    if (speed_diff.Y < 0 || info.old_speed.Y >= 0)
+			    continue;
+		    // Get rid of other components
+		    speed_diff.X = 0;
+		    speed_diff.Z = 0;
+		    f32 pre_factor = 1; // 1 hp per node/s
+		    f32 tolerance = BS*14; // 5 without damage
+		    if (info.type == COLLISION_NODE) {
+			    const ContentFeatures &f = m_client->ndef()->
+				    get(m_map->getNode(info.node_p));
+			    // Determine fall damage modifier
+			    int addp_n = itemgroup_get(f.groups, "fall_damage_add_percent");
+			    // convert node group to an usable fall damage factor
+			    f32 node_fall_factor = 1.0f + (float)addp_n / 100.0f;
+			    // combine both player fall damage modifiers
+			    pre_factor = node_fall_factor * player_fall_factor;
+		    }
+		    float speed = pre_factor * speed_diff.getLength();
 
-		if (speed > tolerance && !player_immortal && pre_factor > 0.0f) {
-			f32 damage_f = (speed - tolerance) / BS;
-			u16 damage = (u16)MYMIN(damage_f + 0.5, U16_MAX);
-			if (damage != 0) {
-				damageLocalPlayer(damage, true);
-				m_client->getEventManager()->put(
-					new SimpleTriggerEvent(MtEvent::PLAYER_FALLING_DAMAGE));
-			}
-		}
-	}
+		    if (speed > tolerance && !player_immortal && pre_factor > 0.0f) {
+			    f32 damage_f = (speed - tolerance) / BS;
+			    u16 damage = (u16)MYMIN(damage_f + 0.5, U16_MAX);
+			    if (damage != 0) {
+				    damageLocalPlayer(damage, true);
+				    m_client->getEventManager()->put(
+					    new SimpleTriggerEvent(MtEvent::PLAYER_FALLING_DAMAGE));
+			    }
+		    }
+	    }
+	  }
 
 	if (m_client->modsLoaded())
 		m_script->environment_step(dtime);

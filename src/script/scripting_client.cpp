@@ -22,6 +22,7 @@
 #include "lua_api/l_camera.h"
 #include "lua_api/l_settings.h"
 #include "lua_api/l_client_sound.h"
+#include "lua_api/l_client_object.h"
 
 ClientScripting::ClientScripting(Client *client):
 	ScriptApiBase(ScriptingType::Client)
@@ -38,6 +39,9 @@ ClientScripting::ClientScripting(Client *client):
 
 	lua_newtable(L);
 	lua_setfield(L, -2, "ui");
+
+	lua_newtable (L);
+	lua_setfield (L, -2, "client_object_refs");
 
 	InitializeModApi(L, top);
 	lua_pop(L, 1);
@@ -62,6 +66,7 @@ void ClientScripting::InitializeModApi(lua_State *L, int top)
 	ModChannelRef::Register(L);
 	LuaSettings::Register(L);
 	ClientSoundHandle::Register(L);
+	ClientObjectRef::Register (L);
 
 	ModApiUtil::InitializeClient(L, top);
 	ModApiClientCommon::Initialize(L, top);

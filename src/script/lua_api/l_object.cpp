@@ -661,51 +661,7 @@ int ObjectRef::l_set_bone_override(lua_State *L)
 		return 0;
 	}
 
-	auto read_prop_attrs = [L](auto &prop) {
-		lua_getfield(L, -1, "absolute");
-		prop.absolute = lua_toboolean(L, -1);
-		lua_pop(L, 1);
-
-		lua_getfield(L, -1, "interpolation");
-		if (lua_isnumber(L, -1))
-			prop.interp_duration = lua_tonumber(L, -1);
-		lua_pop(L, 1);
-	};
-
-	lua_getfield(L, 3, "position");
-	if (!lua_isnil(L, -1)) {
-		lua_getfield(L, -1, "vec");
-		if (!lua_isnil(L, -1))
-			props.position.vector = check_v3f(L, -1);
-		lua_pop(L, 1);
-
-		read_prop_attrs(props.position);
-	}
-	lua_pop(L, 1);
-
-	lua_getfield(L, 3, "rotation");
-	if (!lua_isnil(L, -1)) {
-		lua_getfield(L, -1, "vec");
-		if (!lua_isnil(L, -1)) {
-			props.rotation.next_radians = check_v3f(L, -1);
-			props.rotation.next = core::quaternion(props.rotation.next_radians);
-		}
-		lua_pop(L, 1);
-
-		read_prop_attrs(props.rotation);
-	}
-	lua_pop(L, 1);
-
-	lua_getfield(L, 3, "scale");
-	if (!lua_isnil(L, -1)) {
-		lua_getfield(L, -1, "vec");
-		props.scale.vector = lua_isnil(L, -1) ? v3f(1) : check_v3f(L, -1);
-		lua_pop(L, 1);
-
-		read_prop_attrs(props.scale);
-	}
-	lua_pop(L, 1);
-
+	read_bone_override (L, 3, props);
 	sao->setBoneOverride(bone, props);
 	return 0;
 }

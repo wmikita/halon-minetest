@@ -8,6 +8,7 @@
 #include "cpp_api/s_base.h"
 #include "mapnode.h"
 #include "util/pointedthing.h"
+#include "collision.h"
 
 #ifdef _CRT_MSVCP_CURRENT
 #include <cstdint>
@@ -17,10 +18,13 @@ class ClientEnvironment;
 struct ItemStack;
 class Inventory;
 struct ItemDefinition;
+class LocalPlayer;
 
 class ScriptApiClient : virtual public ScriptApiBase
 {
 public:
+	~ScriptApiClient () override;
+
 	// Calls when mods are loaded
 	void on_mods_loaded();
 
@@ -41,6 +45,11 @@ public:
 	bool on_item_use(const ItemStack &item, const PointedThing &pointed);
 
 	bool on_inventory_open(Inventory *inventory);
+	void on_teleport_localplayer (const v3f &);
+	void on_localplayer_object_available (void);
 
 	void setEnv(ClientEnvironment *env);
+	bool callOnMove (LocalPlayer *, f32, Environment *,
+			 std::vector<CollisionInfo> *);
+	void removeClientObjectReference (ClientActiveObject *);
 };

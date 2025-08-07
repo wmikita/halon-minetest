@@ -12,6 +12,10 @@
 #include "map.h"
 #include "client.h"
 #include "content_cao.h"
+#include "script/common/c_content.h"
+#include "script/common/c_converter.h"
+#include "script/scripting_client.h"
+#include "profiler.h"
 
 /*
 	PlayerSettings
@@ -205,6 +209,92 @@ bool LocalPlayer::updateSneakNode(Map *map, const v3f &position,
 		}
 	}
 	return true;
+}
+
+bool
+LocalPlayer::luaMove (lua_State *L, f32 dtime, Environment *env,
+		      std::vector<CollisionInfo> *collision_info)
+{
+  PlayerSettings &player_settings = getPlayerSettings();
+  ScopeProfiler sp (g_profiler, "Client: luaMove", SPT_AVG, PRECISION_MICRO);
+
+  if (getParent ())
+    return false;
+
+  /* Integrate the previous velocity and push moveresults.
+     moveresults is nil if noclip is enabled.  */
+
+  v3f position = getPosition ();
+  bool fly_allowed = m_client->checkLocalPrivilege ("fly");
+  bool noclip = m_client->checkLocalPrivilege ("noclip") && player_settings.noclip;
+  bool free_move = player_settings.free_move && fly_allowed;
+  v3f old_position = position;
+  v3f old_speed = m_speed;
+
+  /* Push dtime.  */
+  lua_pushnumber (L, dtime);
+
+  if (free_move && noclip)
+    {
+      /* Integrate the velocity without collision detection or
+	 server-sent velocity updates.  */
+      position += m_speed * dtime;
+      setPosition (position);
+      /* Push moveresult.  */
+      lua_pushnil (L);
+    }
+  else
+    {
+      collisionMoveResult result;
+      float player_stepheight
+	= ((m_cao == nullptr) ? 0.0f : m_cao->getStepHeight ());
+
+      m_speed += m_added_velocity;
+      m_added_velocity = v3f (0.0f);
+      result = collisionMoveSimple (env, m_client, m_collisionbox,
+				    player_stepheight, dtime,
+				    &position, &m_speed, v3f (0.0f),
+				    m_cao);
+
+      /* Push collisions to this vector.  */
+      for (const auto &colinfo : result.collisions)
+	collision_info->push_back (colinfo);
+
+      /* Push moveresult.  */
+      push_collision_move_result (L, result, true);
+      setPosition (position);
+    }
+
+  /* Push parameter list.  This is a table of the following form:
+     {
+         flying = ...,
+	 noclip = ...,
+	 old_position = ...,
+     } */
+
+  lua_newtable (L);
+  {
+    int top = lua_gettop (L);
+    lua_pushboolean (L, free_move);
+    lua_setfield (L, -2, "flying");
+    lua_pushboolean (L, noclip);
+    lua_setfield (L, -2, "noclip");
+    push_v3f (L, old_position / BS);
+    lua_setfield (L, -2, "old_position");
+    push_v3f (L, old_speed / BS);
+    lua_setfield (L, -2, "old_velocity");
+    lua_settop (L, top);
+  }
+  return true;
+}
+
+void
+LocalPlayer::serverSetPosition (const v3f &position)
+{
+  setPosition (position);
+
+  if (m_client->modsLoaded ())
+    m_client->getScript ()->on_teleport_localplayer (position);
 }
 
 void LocalPlayer::move(f32 dtime, Environment *env,
@@ -518,11 +608,6 @@ void LocalPlayer::move(f32 dtime, Environment *env,
 	handleAutojump(dtime, env, result, initial_position, initial_speed);
 }
 
-void LocalPlayer::move(f32 dtime, Environment *env)
-{
-	move(dtime, env, nullptr);
-}
-
 void LocalPlayer::applyControl(float dtime, Environment *env)
 {
 	// Clear stuff
@@ -757,7 +842,22 @@ v3s16 LocalPlayer::getLightPosition() const
 
 v3f LocalPlayer::getEyeOffset() const
 {
-	return v3f(0.0f, BS * m_eye_height, 0.0f);
+  if (m_eye_offset_overridden)
+    return m_eye_offset;
+  else
+    return v3f(0.0f, BS * m_eye_height, 0.0f);
+}
+
+void
+LocalPlayer::overrideEyeOffset (v3f *offset)
+{
+  if (!offset)
+    m_eye_offset_overridden = false;
+  else
+    {
+      m_eye_offset = *offset;
+      m_eye_offset_overridden = true;
+    }
 }
 
 ClientActiveObject *LocalPlayer::getParent() const

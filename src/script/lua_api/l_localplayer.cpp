@@ -10,6 +10,10 @@
 #include "hud_element.h"
 #include "common/c_content.h"
 #include "client/content_cao.h"
+#include "l_client_object.h"
+#include "client/client.h"
+#include "client/camera.h"
+#include "collision.h"
 
 LuaLocalPlayer::LuaLocalPlayer(LocalPlayer *m) : m_localplayer(m)
 {
@@ -251,6 +255,10 @@ int LuaLocalPlayer::l_get_control(lua_State *L)
 	lua_setfield(L, -2, "movement_x");
 	lua_pushnumber(L, movement.Y);
 	lua_setfield(L, -2, "movement_y");
+	lua_pushnumber (L, c.yaw * core::DEGTORAD);
+	lua_setfield (L, -2, "yaw");
+	lua_pushnumber (L, c.pitch * core::DEGTORAD);
+	lua_setfield (L, -2, "pitch");
 
 	set("up",    c.direction_keys & (1 << 0));
 	set("down",  c.direction_keys & (1 << 1));
@@ -436,6 +444,127 @@ int LuaLocalPlayer::l_hud_get_all(lua_State *L)
 	return 1;
 }
 
+// set_player_callbacks (self, callbacks)
+
+int
+LuaLocalPlayer::l_set_player_callbacks (lua_State *L)
+{
+  lua_getglobal (L, "core");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_insert (L, -2);
+  lua_setfield (L, -2, "player_callbacks");
+  return 1;
+}
+
+// set_velocity (self, v)
+
+int
+LuaLocalPlayer::l_set_velocity (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  v3f v = check_v3f (L, 2);
+  player->setSpeed (v * BS);
+  return 1;
+}
+
+// get_object (self)
+
+int
+LuaLocalPlayer::l_get_object (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  if (!player->getCAO ())
+    lua_pushnil (L);
+  else
+    ClientObjectRef::clientObjectRefGetOrCreate (L, player->getCAO ());
+  return 1;
+}
+
+// set_pos (self, v3f)
+int
+LuaLocalPlayer::l_set_pos (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  v3f v = check_v3f (L, 2);
+  player->setPosition (v * BS);
+  return 1;
+}
+
+// get_fov (self)
+int
+LuaLocalPlayer::l_get_fov (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  const auto &fov_spec = player->getFov ();
+
+  lua_pushnumber (L, fov_spec.fov);
+  lua_pushboolean (L, fov_spec.is_multiplier);
+  lua_pushnumber (L, fov_spec.transition_time);
+  return 3;
+}
+
+// set_fov (self, fov, is_multiplier, transition_time)
+int
+LuaLocalPlayer::l_set_fov (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  bool update;
+
+  if (!lua_isnil (L, 2))
+    {
+      PlayerFovSpec s;
+      s.fov = readParam<float> (L, 2);
+      s.is_multiplier = readParam<bool> (L, 3, false);
+      if (lua_isnumber (L, 4))
+	s.transition_time = readParam<float>(L, 4);
+
+      update = player->overrideFov (&s);
+    }
+  else
+    update = player->overrideFov (NULL);
+
+  if (update)
+    {
+      Client *client = getClient (L);
+      client->getCamera ()->notifyFovChange ();
+    }
+
+  return 0;
+}
+
+// collision_move (velocity, dtime)
+int
+LuaLocalPlayer::l_collision_move (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  ClientActiveObject *cao = player->getCAO ();
+  float stepheight = (cao ? player->getCAO ()->getStepHeight ()
+		      : 0.0);
+  collisionMoveResult result;
+  v3f pos = read_v3f (L, 2) * BS;
+  v3f velocity = read_v3f (L, 3) * BS;
+  float dtime = readParam<float> (L, 4);
+  Client *client = getClient (L);
+  ClientEnvironment *env = &client->getEnv ();
+
+  result = collisionMoveSimple (env, client, player->getCollisionbox (),
+				stepheight, dtime, &pos, &velocity,
+				v3f (0.0), cao);
+  push_v3f (L, pos / BS);
+  push_v3f (L, velocity / BS);
+  push_collision_move_result (L, result, true);
+  return 3;
+}
+
+// set_touching_ground (player)
+int
+LuaLocalPlayer::l_set_touching_ground (lua_State *L)
+{
+  LocalPlayer *player = getobject (L, 1);
+  player->touching_ground = lua_toboolean (L, 2);
+  return 0;
+}
+
 LocalPlayer *LuaLocalPlayer::getobject(LuaLocalPlayer *ref)
 {
 	return ref->m_localplayer;
@@ -498,8 +627,15 @@ const luaL_Reg LuaLocalPlayer::methods[] = {
 		luamethod(LuaLocalPlayer, hud_change),
 		luamethod(LuaLocalPlayer, hud_get),
 		luamethod(LuaLocalPlayer, hud_get_all),
-
 		luamethod(LuaLocalPlayer, get_move_resistance),
+		luamethod (LuaLocalPlayer, set_player_callbacks),
+		luamethod (LuaLocalPlayer, set_velocity),
+		luamethod (LuaLocalPlayer, get_object),
+		luamethod (LuaLocalPlayer, set_pos),
+		luamethod (LuaLocalPlayer, set_fov),
+		luamethod (LuaLocalPlayer, get_fov),
+		luamethod (LuaLocalPlayer, collision_move),
+		luamethod (LuaLocalPlayer, set_touching_ground),
 
 		{0, 0}
 };

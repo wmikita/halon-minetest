@@ -575,7 +575,7 @@ void Client::handleCommand_MovePlayer(NetworkPacket* pkt)
 
 	*pkt >> pos >> pitch >> yaw;
 
-	player->setPosition(pos);
+	player->serverSetPosition (pos);
 
 	infostream << "Client got TOCLIENT_MOVE_PLAYER"
 			<< " pos=" << pos

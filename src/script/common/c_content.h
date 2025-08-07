@@ -103,11 +103,13 @@ void push_item_definition(lua_State *L, const ItemDefinition &i);
 void push_item_definition_full(lua_State *L, const ItemDefinition &i);
 
 /// @param fallback set to true if reading from bare entity table (not initial_properties)
-void read_object_properties(lua_State *L, int index,
+int read_object_properties(lua_State *L, int index,
 		ServerActiveObject *sao, ObjectProperties *prop,
 		IItemDefManager *idef, bool fallback = false);
 
 void push_object_properties(lua_State *L, const ObjectProperties *prop);
+int flags_from_object_prop_list (lua_State *);
+void read_bone_override (lua_State *, int, BoneOverride &);
 
 void push_inventory_list(lua_State *L, const InventoryList &invlist);
 void push_inventory_lists(lua_State *L, const Inventory &inv);
@@ -172,6 +174,6 @@ void push_hud_element(lua_State *L, HudElement *elem);
 
 bool read_hud_change(lua_State *L, HudElementStat &stat, HudElement *elem, void **value);
 
-void push_collision_move_result(lua_State *L, const collisionMoveResult &res);
+void push_collision_move_result(lua_State *L, const collisionMoveResult &res, bool csm = false);
 
 void push_mod_spec(lua_State *L, const ModSpec &spec, bool include_unsatisfied);

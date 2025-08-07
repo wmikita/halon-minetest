@@ -10,8 +10,12 @@
 #include "lua_api/l_noise.h"
 #include "lua_api/l_vmanip.h"
 #include "lua_api/l_object.h"
+#if CHECK_CLIENT_BUILD ()
+#include "lua_api/l_client_object.h"
+#endif /* CHECK_CLIENT_BUILD () */
 #include "common/c_converter.h"
 #include "common/c_content.h"
+#include "collision.h"
 #include "scripting_server.h"
 #include "mapblock.h"
 #include "server.h"
@@ -477,6 +481,41 @@ int ModApiEnv::l_get_node_max_level(lua_State *L)
 	MapNode n = env->getMap().getNode(pos);
 	lua_pushnumber(L, n.getMaxLevel(env->getGameDef()->ndef()));
 	return 1;
+}
+
+// collides (aabb3f)
+int
+ModApiEnv::l_collides (lua_State *L)
+{
+  GET_PLAIN_ENV_PTR;
+
+  aabb3f box = read_aabb3f (L, 1, BS);
+  v3f pos = read_v3f (L, 2) * BS;
+  bool collide_with_objects
+    = (lua_isnone (L, 3) || lua_toboolean (L, 3));
+  ActiveObject *self_object = NULL;
+
+  if (!lua_isnil (L, 4))
+    {
+#if CHECK_CLIENT_BUILD ()
+      ClientEnvironment *client = dynamic_cast<ClientEnvironment *> (env);
+
+      if (client)
+	{
+	  ClientObjectRef *ref = checkObject<ClientObjectRef> (L, 4);
+	  self_object = ref->get_object ();
+	}
+#endif /* CHECK_CLIENT_BUILD */
+    }
+
+  if (collision_check_intersection (env, env->getGameDef (), box, pos,
+				    self_object, collide_with_objects,
+				    !lua_toboolean (L, 5)))
+    lua_pushboolean (L, true);
+  else
+    lua_pushboolean (L, false);
+
+  return 1;
 }
 
 // get_node_level(pos)
@@ -1444,6 +1483,7 @@ void ModApiEnv::InitializeClient(lua_State *L, int top)
 	API_FCT(get_timeofday);
 	API_FCT(get_node_max_level);
 	API_FCT(get_node_level);
+	API_FCT(collides);
 	API_FCT(find_nodes_with_meta);
 	API_FCT(find_node_near);
 	API_FCT(find_nodes_in_area);

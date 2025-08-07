@@ -61,6 +61,7 @@ public:
 
 	Client *getGameDef() { return m_client; }
 	void setScript(ClientScripting *script) { m_script = script; }
+	ClientScripting *getScript () { return m_script; }
 
 	void step(f32 dtime);
 

@@ -70,6 +70,17 @@ struct MeshAnimationInfo {
 /*
 	GenericCAO
 */
+struct ClientBoneOverride : BoneOverride
+{
+  ClientBoneOverride () = default;
+  ClientBoneOverride (BoneOverride data)
+    : BoneOverride (data) {};
+
+  bool m_client_overridden = false;
+  BoneOverride m_server_value;
+};
+
+typedef std::unordered_map<std::string, ClientBoneOverride> ClientBoneOverrideMap;
 
 class GenericCAO : public ClientActiveObject
 {
@@ -125,8 +136,17 @@ private:
 	float m_anim_framelength = 0.2f;
 	float m_anim_timer = 0.0f;
 
+	/* Animation overrides.  */
+	bool m_animation_overridden = false;
+	bool m_animation_speed_overridden = false;
+	/* Only initialized if m_animation_overriden and/or
+	   m_animation_speed_overriden.  */
+	v2f m_server_animation_range;
+	float m_server_animation_speed;
+	float m_server_animation_blend;
+	bool m_server_animation_loop;
 	// stores position and rotation for each bone name
-	BoneOverrideMap m_bone_override;
+	ClientBoneOverrideMap m_bone_override;
 
 	// Attachments
 	object_t m_attachment_parent_id = 0;
@@ -144,8 +164,10 @@ private:
 	// last applied texture modifier
 	std::string m_current_texture_modifier = "";
 	float m_step_distance_counter = 0.0f;
+	ObjectPropertyOverrides m_prop_overrides;
 
 	bool visualExpiryRequired(const ObjectProperties &newprops) const;
+	void applyObjectPropertyOverrides (void);
 
 public:
 
@@ -283,8 +305,11 @@ public:
 	void updateTextures(std::string mod);
 
 	void updateAnimation();
-
 	void updateAnimationSpeed();
+	void overrideAnimationParams (v2f, float, bool);
+	void overrideAnimationSpeed (float);
+	void resetAnimationParams (void);
+	void resetAnimationSpeed (void);
 
 	void processMessage(const std::string &data) override;
 
@@ -299,10 +324,12 @@ public:
 	}
 
 	void updateMeshCulling();
+	void overrideObjectProperties (ObjectProperties, int);
+	void clearPropertyOverrides (int);
+	void setBoneOverride (std::string, BoneOverride *);
 
 private:
 
 	/// Update the parent chain so getPosition() returns an up to date position.
 	void updateParentChain() const;
-
 };

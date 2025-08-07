@@ -4,6 +4,10 @@
 
 #include "clientobject.h"
 #include "debug.h"
+#include "porting.h"
+#include "cpp_api/s_base.h"
+#include "script/scripting_client.h"
+#include "client/clientenvironment.h"
 
 /*
 	ClientActiveObject
@@ -20,6 +24,12 @@ ClientActiveObject::ClientActiveObject(u16 id, Client *client,
 ClientActiveObject::~ClientActiveObject()
 {
 	removeFromScene(true);
+	if (m_env)
+	  {
+	    ClientScripting *scripting = m_env->getScript ();
+	    if (scripting)
+	      scripting->removeClientObjectReference (this);
+	  }
 }
 
 std::unique_ptr<ClientActiveObject> ClientActiveObject::create(ActiveObjectType type,
@@ -46,5 +56,3 @@ void ClientActiveObject::registerType(u16 type, Factory f)
 		return;
 	m_types[type] = f;
 }
-
-

@@ -67,9 +67,9 @@ public:
 
 	f32 gravity = 0; // total downwards acceleration
 
-	void move(f32 dtime, Environment *env);
 	void move(f32 dtime, Environment *env,
 			std::vector<CollisionInfo> *collision_info);
+	bool luaMove (lua_State *, f32, Environment *, std::vector<CollisionInfo> *);
 
 	void applyControl(float dtime, Environment *env);
 
@@ -126,6 +126,7 @@ public:
 	void setPitch(f32 pitch) { m_pitch = pitch; }
 	f32 getPitch() const { return m_pitch; }
 
+	void serverSetPosition (const v3f &position);
 	inline void setPosition(const v3f &position)
 	{
 		m_position = position;
@@ -143,6 +144,7 @@ public:
 	// For accurate positions, use the Camera functions
 	v3f getEyePosition() const { return m_position + getEyeOffset(); }
 	v3f getEyeOffset() const;
+	void overrideEyeOffset (v3f *);
 	void setEyeHeight(float eye_height) { m_eye_height = eye_height; }
 
 	void setCollisionbox(const aabb3f &box) { m_collisionbox = box; }
@@ -164,6 +166,31 @@ public:
 	inline Lighting& getLighting() { return m_lighting; }
 
 	inline PlayerSettings &getPlayerSettings() { return m_player_settings; }
+
+	bool
+	overrideFov (const PlayerFovSpec *spec)
+	{
+	  if (spec)
+	    {
+	      m_fov_overridden = true;
+	      m_client_fov_spec = *spec;
+	      return true;
+	    }
+	  else if (m_fov_overridden)
+	    {
+	      m_fov_overridden = false;
+	      return true;
+	    }
+	  return false;
+	}
+
+	const PlayerFovSpec &
+	getFov() const
+	{
+	  if (m_fov_overridden)
+	    return m_client_fov_spec;
+	  return Player::getFov ();
+	}
 
 private:
 	void accelerate(const v3f &target_speed, const f32 max_increase_H,
@@ -211,6 +238,8 @@ private:
 	float m_zoom_fov = 0.0f;
 	bool m_autojump = false;
 	float m_autojump_time = 0.0f;
+	bool m_eye_offset_overridden = false;
+	v3f m_eye_offset;
 
 	v3f m_added_velocity = v3f(0.0f); // in BS-space; cleared on each move()
 
@@ -219,4 +248,6 @@ private:
 
 	PlayerSettings m_player_settings;
 	Lighting m_lighting;
+	PlayerFovSpec m_client_fov_spec;
+	bool m_fov_overridden = false;
 };

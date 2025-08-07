@@ -23,9 +23,12 @@ private:
 
 	static int l_get_pos(lua_State *L);
 	static int l_get_offset(lua_State *L);
+	static int l_set_offset (lua_State *);
 	static int l_get_look_dir(lua_State *L);
 	static int l_get_look_vertical(lua_State *L);
 	static int l_get_look_horizontal(lua_State *L);
+	static int l_set_look_vertical (lua_State *);
+	static int l_set_look_horizontal (lua_State *);
 	static int l_get_aspect_ratio(lua_State *L);
 
 	static Camera *getobject(LuaCamera *ref);

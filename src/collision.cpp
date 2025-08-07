@@ -589,7 +589,11 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 			info.new_pos = *pos_f;
 			info.old_speed = old_speed_f;
 			info.new_speed = *speed_f;
-			result.collisions.push_back(info);
+
+			if (is_collision) {
+				info.axis = nearest_collided;
+				result.collisions.push_back(std::move(info));
+			}
 		}
 
 		if (dtime < BS * 1e-10f)
@@ -642,7 +646,7 @@ collisionMoveResult collisionMoveSimple(Environment *env, IGameDef *gamedef,
 
 bool collision_check_intersection(Environment *env, IGameDef *gamedef,
 		const aabb3f &box_0, const v3f &pos_f, ActiveObject *self,
-		bool collide_with_objects)
+		bool collide_with_objects, bool accept_perfect)
 {
 	ScopeProfiler sp(g_profiler, PROFILER_NAME("collision_check_intersection()"), SPT_AVG, PRECISION_MICRO);
 
@@ -667,11 +671,19 @@ bool collision_check_intersection(Environment *env, IGameDef *gamedef,
 		Collision detection
 	*/
 	aabb3f checkbox = box_0;
-	// aabbox3d::intersectsWithBox(box) returns true when the faces are touching perfectly.
-	// However, we do not want want a true-ish return value in that case. Add some tolerance.
-	checkbox.MinEdge += pos_f + (0.1f * BS);
-	checkbox.MaxEdge += pos_f - (0.1f * BS);
 
+	if (!accept_perfect)
+	  {
+	    // aabbox3d::intersectsWithBox(box) returns true when the faces are touching perfectly.
+	    // However, we do not want want a true-ish return value in that case. Add some tolerance.
+	    checkbox.MinEdge += pos_f + (0.1f * BS);
+	    checkbox.MaxEdge += pos_f - (0.1f * BS);
+	  }
+	else
+	  {
+	    checkbox.MinEdge += pos_f;
+	    checkbox.MaxEdge += pos_f;
+	  }
 	/*
 		Go through every node and object box
 	*/

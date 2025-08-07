@@ -322,19 +322,21 @@ const std::array<const char *, 35> object_property_keys = {
 };
 
 /******************************************************************************/
-void read_object_properties(lua_State *L, int index,
+int read_object_properties(lua_State *L, int index,
 		ServerActiveObject *sao, ObjectProperties *prop, IItemDefManager *idef,
 		bool fallback)
 {
+	int override_props = 0;
+
 	if(index < 0)
 		index = lua_gettop(L) + 1 + index;
 	if (lua_isnil(L, index))
-		return;
+		return 0;
 
 	luaL_checktype(L, -1, LUA_TTABLE);
 
 	int hp_max = 0;
-	if (getintfield(L, -1, "hp_max", hp_max)) {
+	if (sao && getintfield(L, -1, "hp_max", hp_max)) {
 		prop->hp_max = (u16)rangelim(hp_max, 0, U16_MAX);
 		// hp_max = 0 is sometimes used as a hack to keep players dead, only validate for entities
 		if (prop->hp_max == 0 && sao->getType() != ACTIVEOBJECT_TYPE_PLAYER)
@@ -359,13 +361,17 @@ void read_object_properties(lua_State *L, int index,
 	lua_getfield(L, -1, "collisionbox");
 	bool collisionbox_defined = lua_istable(L, -1);
 	if (collisionbox_defined)
-		prop->collisionbox = read_aabb3f(L, -1, 1.0);
+	  {
+	    prop->collisionbox = read_aabb3f(L, -1, 1.0);
+	    override_props |= OVERRIDE_PROPERTY_COLLISIONBOX;
+	  }
 	lua_pop(L, 1);
 
 	lua_getfield(L, -1, "selectionbox");
 	if (lua_istable(L, -1)) {
 		getboolfield(L, -1, "rotate", prop->rotate_selectionbox);
 		prop->selectionbox = read_aabb3f(L, -1, 1.0);
+		override_props |= OVERRIDE_PROPERTY_SELECTIONBOX;
 	} else if (collisionbox_defined) {
 		prop->selectionbox = prop->collisionbox;
 	}
@@ -417,6 +423,7 @@ void read_object_properties(lua_State *L, int index,
 			// removes value, keeps key for next iteration
 			lua_pop(L, 1);
 		}
+		override_props |= OVERRIDE_PROPERTY_TEXTURES;
 	}
 	lua_pop(L, 1);
 
@@ -455,8 +462,12 @@ void read_object_properties(lua_State *L, int index,
 	getboolfield(L, -1, "is_visible", prop->is_visible);
 	getboolfield(L, -1, "makes_footstep_sound", prop->makes_footstep_sound);
 	if (getfloatfield(L, -1, "stepheight", prop->stepheight))
-		prop->stepheight *= BS;
-	getfloatfield(L, -1, "eye_height", prop->eye_height);
+	  {
+	    prop->stepheight *= BS;
+	    override_props |= OVERRIDE_PROPERTY_STEPHEIGHT;
+	  }
+	if (getfloatfield(L, -1, "eye_height", prop->eye_height))
+	  override_props |= OVERRIDE_PROPERTY_EYE_HEIGHT;
 
 	getfloatfield(L, -1, "automatic_rotate", prop->automatic_rotate);
 	lua_getfield(L, -1, "automatic_face_movement_dir");
@@ -507,12 +518,16 @@ void read_object_properties(lua_State *L, int index,
 	getstringfield(L, -1, "infotext", prop->infotext);
 	getboolfield(L, -1, "static_save", prop->static_save);
 
-	lua_getfield(L, -1, "wield_item");
-	if (!lua_isnil(L, -1))
-		prop->wield_item = read_item(L, -1, idef).getItemString();
-	lua_pop(L, 1);
+	if (idef)
+	  {
+	    lua_getfield(L, -1, "wield_item");
+	    if (!lua_isnil(L, -1))
+	      prop->wield_item = read_item(L, -1, idef).getItemString();
+	    lua_pop(L, 1);
+	  }
 
-	getfloatfield(L, -1, "zoom_fov", prop->zoom_fov);
+	if (getfloatfield(L, -1, "zoom_fov", prop->zoom_fov))
+	  override_props |= OVERRIDE_PROPERTY_ZOOM_FOV;
 	getboolfield(L, -1, "use_texture_alpha", prop->use_texture_alpha);
 	getboolfield(L, -1, "shaded", prop->shaded);
 	getboolfield(L, -1, "show_on_minimap", prop->show_on_minimap);
@@ -521,6 +536,7 @@ void read_object_properties(lua_State *L, int index,
 
 	// Remember to update object_property_keys above
 	// when adding a new property
+	return override_props;
 }
 
 /******************************************************************************/
@@ -628,6 +644,86 @@ void push_object_properties(lua_State *L, const ObjectProperties *prop)
 
 	// Remember to update object_property_keys above
 	// when adding a new property
+}
+
+/******************************************************************************/
+void
+read_bone_override (lua_State *L, int idx, BoneOverride &props)
+{
+  	auto read_prop_attrs = [L](auto &prop) {
+		lua_getfield(L, -1, "absolute");
+		prop.absolute = lua_toboolean(L, -1);
+		lua_pop(L, 1);
+
+		lua_getfield(L, -1, "interpolation");
+		if (lua_isnumber(L, -1))
+			prop.interp_duration = lua_tonumber(L, -1);
+		lua_pop(L, 1);
+	};
+
+	lua_getfield(L, idx, "position");
+	if (!lua_isnil(L, -1)) {
+		lua_getfield(L, -1, "vec");
+		if (!lua_isnil(L, -1))
+			props.position.vector = check_v3f(L, -1);
+		lua_pop(L, 1);
+
+		read_prop_attrs(props.position);
+	}
+	lua_pop(L, 1);
+
+	lua_getfield(L, idx, "rotation");
+	if (!lua_isnil(L, -1)) {
+		lua_getfield(L, -1, "vec");
+		if (!lua_isnil(L, -1)) {
+			props.rotation.next_radians = check_v3f(L, -1);
+			props.rotation.next = core::quaternion(props.rotation.next_radians);
+		}
+		lua_pop(L, 1);
+
+		read_prop_attrs(props.rotation);
+	}
+	lua_pop(L, 1);
+
+	lua_getfield(L, idx, "scale");
+	if (!lua_isnil(L, -1)) {
+		lua_getfield(L, -1, "vec");
+		props.scale.vector = lua_isnil(L, -1) ? v3f(1) : check_v3f(L, -1);
+		lua_pop(L, 1);
+
+		read_prop_attrs(props.scale);
+	}
+	lua_pop(L, 1);
+}
+
+/******************************************************************************/
+int
+flags_from_object_prop_list (lua_State *L)
+{
+  int flags = 0;
+  lua_pushnil (L);
+  while (lua_next (L, -2))
+    {
+      const char *string;
+
+      if (!lua_isstring (L, -1))
+	continue;
+      string = lua_tostring (L, -1);
+      if (!strcmp (string, "textures"))
+	flags |= OVERRIDE_PROPERTY_TEXTURES;
+      else if (!strcmp (string, "selectionbox"))
+	flags |= OVERRIDE_PROPERTY_SELECTIONBOX;
+      else if (!strcmp (string, "collisionbox"))
+	flags |= OVERRIDE_PROPERTY_COLLISIONBOX;
+      else if (!strcmp (string, "stepheight"))
+	flags |= OVERRIDE_PROPERTY_STEPHEIGHT;
+      else if (!strcmp (string, "eye_height"))
+	flags |= OVERRIDE_PROPERTY_EYE_HEIGHT;
+      else if (!strcmp (string, "zoom_fov"))
+	flags |= OVERRIDE_PROPERTY_ZOOM_FOV;
+      lua_pop (L, 1); /* value.  */
+    }
+  return flags;
 }
 
 /******************************************************************************/
@@ -2594,7 +2690,7 @@ static const char *collision_axis_str[] = {
 	"z",
 };
 
-void push_collision_move_result(lua_State *L, const collisionMoveResult &res)
+void push_collision_move_result(lua_State *L, const collisionMoveResult &res, bool csm)
 {
 	// use faster Lua helper if possible
 	if (res.collisions.size() == 1 && res.collisions.front().type == COLLISION_NODE) {
@@ -2639,7 +2735,7 @@ void push_collision_move_result(lua_State *L, const collisionMoveResult &res)
 		if (c.type == COLLISION_NODE) {
 			push_v3s16(L, c.node_p);
 			lua_setfield(L, -2, "node_pos");
-		} else if (c.type == COLLISION_OBJECT) {
+		} else if (c.type == COLLISION_OBJECT && !csm) {
 			push_objectRef(L, c.object->getId());
 			lua_setfield(L, -2, "object");
 		}

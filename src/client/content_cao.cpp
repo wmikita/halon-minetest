@@ -39,6 +39,9 @@
 #include <SMesh.h>
 #include <IMeshBuffer.h>
 #include <CMeshBuffer.h>
+#include "scripting_client.h"
+
+
 
 struct ToolCapabilities;
 
@@ -310,9 +313,13 @@ void GenericCAO::processInitData(const std::string &data)
 		// Check if it's the current player
 		LocalPlayer *player = m_env->getLocalPlayer();
 		if (player && player->getName() == m_name) {
+			ClientScripting *iface = m_env->getScript ();
+			assert (!player->getCAO ());
 			m_is_local_player = true;
 			m_is_visible = false;
 			player->setCAO(this);
+			if (iface)
+			  iface->on_localplayer_object_available ();
 		}
 	}
 
@@ -979,12 +986,12 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 		pos_translator.val_current = m_position;
 		m_rotation.Y = wrapDegrees_0_360(player->getYaw());
 		rot_translator.val_current = m_rotation;
+		m_velocity = v3f(0,0,0);
+		m_acceleration = v3f(0,0,0);
 
-		if (m_is_visible) {
+		if (m_is_visible && !m_animation_overridden) {
 			LocalPlayerAnimation old_anim = player->last_animation;
 			float old_anim_speed = player->last_animation_speed;
-			m_velocity = v3f(0,0,0);
-			m_acceleration = v3f(0,0,0);
 			const PlayerControl &controls = player->getPlayerControl();
 			f32 new_speed = player->local_animation_speed;
 
@@ -1025,7 +1032,11 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 			if ((new_anim.X + new_anim.Y) > 0 && !getParent()) {
 				allow_update = true;
 				m_animation_range = new_anim;
-				m_animation_speed = new_speed;
+				if (!m_animation_speed_overridden)
+				  m_animation_speed = new_speed;
+				else
+				  /* Not really sent by the server, but eh.  */
+				  m_server_animation_speed = new_speed;
 				player->last_animation_speed = m_animation_speed;
 			} else {
 				player->last_animation = LocalPlayerAnimation::NO_ANIM;
@@ -1078,7 +1089,8 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 	if (node)
 		node->setVisible(m_is_visible);
 
-	if(getParent() != NULL) // Attachments should be glued to their parent by Irrlicht
+	// Attachments should be glued to their parent by Irrlicht.
+	if(getParent() != NULL)
 	{
 		// Set these for later
 		m_position = getPosition();
@@ -1089,7 +1101,6 @@ void GenericCAO::step(float dtime, ClientEnvironment *env)
 	} else {
 		rot_translator.translate(dtime);
 		v3f lastpos = pos_translator.val_current;
-
 		if(m_prop.physical)
 		{
 			aabb3f box = m_prop.collisionbox;
@@ -1392,6 +1403,52 @@ void GenericCAO::updateAnimationSpeed()
 	m_animated_meshnode->setAnimationSpeed(m_animation_speed);
 }
 
+void
+GenericCAO::overrideAnimationParams (v2f range, float blend, bool loop_p)
+{
+  m_server_animation_range = m_animation_range;
+  m_server_animation_loop = m_animation_loop;
+  m_server_animation_blend = m_animation_blend;
+  m_animation_overridden = true;
+  m_animation_range = range;
+  m_animation_loop = loop_p;
+  m_animation_blend = blend;
+  updateAnimation ();
+}
+
+void
+GenericCAO::overrideAnimationSpeed (float speed)
+{
+  m_server_animation_speed = m_animation_speed;
+  m_animation_speed_overridden = true;
+  m_animation_speed = speed;
+  updateAnimationSpeed ();
+}
+
+void
+GenericCAO::resetAnimationParams (void)
+{
+  if (!m_animation_overridden)
+    return;
+
+  m_animation_range = m_server_animation_range;
+  m_animation_loop = m_server_animation_loop;
+  m_animation_blend = m_server_animation_blend;
+  m_animation_overridden = false;
+  updateAnimation ();
+}
+
+void
+GenericCAO::resetAnimationSpeed (void)
+{
+  if (!m_animation_speed_overridden)
+    return;
+
+  m_animation_speed = m_server_animation_speed;
+  m_animation_speed_overridden = false;
+  updateAnimationSpeed ();
+}
+
 void GenericCAO::updateAttachments()
 {
 	ClientActiveObject *parent = getParent();
@@ -1487,6 +1544,7 @@ void GenericCAO::processMessage(const std::string &data)
 
 		// Apply changes
 		m_prop = std::move(newprops);
+		applyObjectPropertyOverrides ();
 
 		m_selection_box = m_prop.selectionbox;
 		m_selection_box.MinEdge *= BS;
@@ -1608,19 +1666,41 @@ void GenericCAO::processMessage(const std::string &data)
 		}
 	} else if (cmd == AO_CMD_SET_ANIMATION) {
 		v2f range = readV2F32(is);
-		if (!m_is_local_player) {
-			m_animation_range = range;
-			m_animation_speed = readF32(is);
-			m_animation_blend = readF32(is);
-			// these are sent inverted so we get true when the server sends nothing
-			m_animation_loop = !readU8(is);
-			updateAnimation();
+		if (!m_is_local_player || m_animation_overridden) {
+		  	if (!m_animation_overridden)
+			  {
+			    m_animation_range = range;
+			    if (!m_animation_speed_overridden)
+			      m_animation_speed = readF32(is);
+			    else
+			      m_server_animation_speed = readF32 (is);
+			    m_animation_blend = readF32(is);
+			    // these are sent inverted so we get true when the server sends nothing
+			    m_animation_loop = !readU8(is);
+			    updateAnimation();
+			  }
+			else
+			  {
+			    m_server_animation_range = range;
+			    if (!m_animation_speed_overridden)
+			      m_animation_speed = readF32(is);
+			    else
+			      m_server_animation_speed = readF32 (is);
+			    m_server_animation_blend = readF32 (is);
+			    m_server_animation_loop = !readU8 (is);
+
+			    if (!m_animation_speed_overridden)
+			      updateAnimationSpeed ();
+			  }
 		} else {
 			LocalPlayer *player = m_env->getLocalPlayer();
 			if(player->last_animation == LocalPlayerAnimation::NO_ANIM)
 			{
 				m_animation_range = range;
-				m_animation_speed = readF32(is);
+				if (!m_animation_speed_overridden)
+				  m_animation_speed = readF32(is);
+				else
+				  m_server_animation_speed = readF32 (is);
 				m_animation_blend = readF32(is);
 				// these are sent inverted so we get true when the server sends nothing
 				m_animation_loop = !readU8(is);
@@ -1641,20 +1721,42 @@ void GenericCAO::processMessage(const std::string &data)
 			// FIXME: ^ This code is trash. It's also broken.
 		}
 	} else if (cmd == AO_CMD_SET_ANIMATION_SPEED) {
-		m_animation_speed = readF32(is);
-		updateAnimationSpeed();
+		if (!m_animation_speed_overridden)
+		  {
+		    m_animation_speed = readF32(is);
+		    updateAnimationSpeed();
+		  }
+		else
+		  m_server_animation_speed = readF32 (is);
 	} else if (cmd == AO_CMD_SET_BONE_POSITION) {
 		std::string bone = deSerializeString16(is);
 		auto it = m_bone_override.find(bone);
-		BoneOverride props;
+		ClientBoneOverride props, orig_props;
 		if (it != m_bone_override.end()) {
-			props = it->second;
+			orig_props = props = it->second;
 			// Reset timer
 			props.dtime_passed = 0;
-			// Save previous values for interpolation
-			props.position.previous = props.position.vector;
-			props.rotation.previous = props.rotation.next;
-			props.scale.previous = props.scale.vector;
+
+			/* I don't really want to make any provisions
+			   to handle interpolation between client and
+			   server-specified bones.  */
+
+			if (!props.m_client_overridden)
+			  {
+			    // Save previous values for interpolation
+			    props.position.previous = props.position.vector;
+			    props.rotation.previous = props.rotation.next;
+			    props.scale.previous = props.scale.vector;
+			  }
+			else
+			  {
+			    props.position.previous
+			      = props.m_server_value.position.vector;
+			    props.rotation.previous
+			      = props.m_server_value.rotation.next;
+			    props.scale.previous
+			      = props.m_server_value.scale.vector;
+			  }
 		} else {
 			// Disable interpolation
 			props.position.interp_duration = 0.0f;
@@ -1681,7 +1783,13 @@ void GenericCAO::processMessage(const std::string &data)
 			props.rotation.absolute = (absoluteFlag & 2) > 0;
 			props.scale.absolute = (absoluteFlag & 4) > 0;
 		}
-		m_bone_override[bone] = props;
+		if (props.m_client_overridden)
+		  {
+		    orig_props.m_server_value = props;
+		    m_bone_override[bone] = orig_props;
+		  }
+		else
+		  m_bone_override[bone] = props;
 	} else if (cmd == AO_CMD_ATTACH_TO) {
 		u16 parent_id = readS16(is);
 		std::string bone = deSerializeString16(is);
@@ -1848,6 +1956,168 @@ void GenericCAO::updateMeshCulling()
 		});
 	}
 }
+
+
+
+/* Property overrides.  */
+
+static void
+copy_props_by_flags (ObjectProperties &dst, ObjectProperties &src,
+		     ObjectProperties &old, int props_to_copy,
+		     int props_to_save)
+{
+  if (props_to_copy & OVERRIDE_PROPERTY_TEXTURES)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_TEXTURES)
+	old.textures = std::move (dst.textures);
+      dst.textures = std::move (src.textures);
+    }
+  if (props_to_copy & OVERRIDE_PROPERTY_COLLISIONBOX)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_COLLISIONBOX)
+	old.collisionbox = dst.collisionbox;
+      dst.collisionbox = src.collisionbox;
+    }
+  if (props_to_copy & OVERRIDE_PROPERTY_SELECTIONBOX)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_SELECTIONBOX)
+	old.selectionbox = dst.selectionbox;
+      dst.selectionbox = src.selectionbox;
+    }
+  if (props_to_copy & OVERRIDE_PROPERTY_STEPHEIGHT)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_STEPHEIGHT)
+	old.stepheight = dst.stepheight;
+      dst.stepheight = src.stepheight;
+    }
+  if (props_to_copy & OVERRIDE_PROPERTY_EYE_HEIGHT)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_EYE_HEIGHT)
+	old.eye_height = dst.eye_height;
+      dst.eye_height = src.eye_height;
+    }
+  if (props_to_copy & OVERRIDE_PROPERTY_ZOOM_FOV)
+    {
+      if (props_to_save & OVERRIDE_PROPERTY_ZOOM_FOV)
+	old.zoom_fov = dst.zoom_fov;
+      dst.zoom_fov = src.zoom_fov;
+    }
+}
+
+void
+GenericCAO::applyObjectPropertyOverrides (void)
+{
+  int flags = m_prop_overrides.flags;
+  copy_props_by_flags (m_prop, m_prop_overrides.props,
+		       m_prop_overrides.old, flags, flags);
+}
+
+void
+GenericCAO::overrideObjectProperties (ObjectProperties props,
+				      int props_to_override)
+{
+  ObjectProperties dummy;
+  int props_to_save
+    = props_to_override & ~m_prop_overrides.flags;
+
+  m_prop_overrides.flags |= props_to_override;
+  copy_props_by_flags (m_prop_overrides.props, props, dummy,
+		       props_to_override, 0);
+  copy_props_by_flags (m_prop, props, m_prop_overrides.old,
+		       props_to_override, props_to_save);
+
+  if (m_is_local_player)
+    {
+      LocalPlayer *player = m_env->getLocalPlayer ();
+
+      if (props_to_override & OVERRIDE_PROPERTY_COLLISIONBOX)
+	{
+	  aabb3f mul = m_prop.collisionbox;
+	  mul.MinEdge *= BS;
+	  mul.MaxEdge *= BS;
+	  player->setCollisionbox (mul);
+	}
+
+      if (props_to_override & OVERRIDE_PROPERTY_EYE_HEIGHT)
+	player->setEyeHeight (m_prop.eye_height);
+
+      if (props_to_override & OVERRIDE_PROPERTY_ZOOM_FOV)
+	player->setZoomFOV (m_prop.zoom_fov);
+    }
+}
+
+void
+GenericCAO::clearPropertyOverrides (int props_to_clear)
+{
+  ObjectProperties dummy;
+  int clear = m_prop_overrides.flags & props_to_clear;
+  m_prop_overrides.flags &= ~clear;
+  copy_props_by_flags (m_prop, m_prop_overrides.old, dummy, clear, 0);
+
+  if (m_is_local_player)
+    {
+      LocalPlayer *player = m_env->getLocalPlayer ();
+
+      if (clear & OVERRIDE_PROPERTY_COLLISIONBOX)
+	{
+	  aabb3f mul = m_prop.collisionbox;
+	  mul.MinEdge *= BS;
+	  mul.MaxEdge *= BS;
+	  player->setCollisionbox (mul);
+	}
+
+      if (clear & OVERRIDE_PROPERTY_EYE_HEIGHT)
+	player->setEyeHeight (m_prop.eye_height);
+
+      if (clear & OVERRIDE_PROPERTY_ZOOM_FOV)
+	player->setZoomFOV (m_prop.zoom_fov);
+    }
+}
+
+void
+GenericCAO::setBoneOverride (std::string bone, BoneOverride *props)
+{
+  if (props)
+    {
+      ClientBoneOverride &value = m_bone_override[bone];
+      if (!value.m_client_overridden)
+	{
+	  value.m_server_value = value;
+	  value.m_client_overridden = true;
+	}
+      else
+	{
+	  value.position.previous = value.position.vector;
+	  value.rotation.previous = value.rotation.next;
+	  value.scale.previous = value.scale.vector;
+	}
+
+      value.position.vector = props->position.vector;
+      value.position.interp_timer = props->position.interp_timer;
+      value.position.absolute = props->position.absolute;
+      value.rotation.next = props->rotation.next;
+      value.rotation.interp_timer = props->rotation.interp_timer;
+      value.rotation.absolute = props->rotation.absolute;
+      value.scale.vector = props->scale.vector;
+      value.scale.interp_timer = props->scale.interp_timer;
+      value.scale.absolute = props->scale.absolute;
+    }
+  else
+    {
+      /* Revert any existing override.  */
+      auto it = m_bone_override.find (bone);
+      if (it != m_bone_override.end ()
+	  && it->second.m_client_overridden)
+	{
+	  if (it->second.m_server_value.isIdentity ())
+	    m_bone_override.erase (bone);
+	  else
+	    m_bone_override[bone] = it->second.m_server_value;
+	}
+    }
+}
+
+
 
 // Prototype
 static GenericCAO proto_GenericCAO(nullptr, nullptr);

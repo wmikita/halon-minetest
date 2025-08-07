@@ -95,3 +95,22 @@ struct ObjectProperties
 	void serialize(std::ostream &os) const;
 	void deSerialize(std::istream &is);
 };
+
+#define OVERRIDE_PROPERTY_TEXTURES	(1 << 0)
+#define OVERRIDE_PROPERTY_COLLISIONBOX	(1 << 1)
+#define OVERRIDE_PROPERTY_SELECTIONBOX	(1 << 3)
+#define OVERRIDE_PROPERTY_STEPHEIGHT	(1 << 4)
+#define OVERRIDE_PROPERTY_EYE_HEIGHT	(1 << 5)
+#define OVERRIDE_PROPERTY_ZOOM_FOV	(1 << 6)
+
+struct ObjectPropertyOverrides
+{
+  ObjectProperties props;
+  ObjectProperties old;
+
+  /* Bitmask specifying overriden properties.  */
+  int flags;
+
+public:
+  ObjectPropertyOverrides () : flags (0) {};
+};

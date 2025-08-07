@@ -107,6 +107,23 @@ int LuaCamera::l_get_offset(lua_State *L)
 	return 1;
 }
 
+// set_offset(self, offset)
+int
+LuaCamera::l_set_offset (lua_State *L)
+{
+  LocalPlayer *player = getClient (L)->getEnv ().getLocalPlayer ();
+  sanity_check (player);
+
+  if (!lua_isnil (L, 2))
+    {
+      v3f offset = readParam<v3f> (L, 2, v3f (0)) * BS;
+      player->overrideEyeOffset (&offset);
+    }
+  else
+    player->overrideEyeOffset (nullptr);
+  return 1;
+}
+
 // get_look_dir(self)
 int LuaCamera::l_get_look_dir(lua_State *L)
 {
@@ -125,7 +142,7 @@ int LuaCamera::l_get_look_horizontal(lua_State *L)
 	LocalPlayer *player = getClient(L)->getEnv().getLocalPlayer();
 	sanity_check(player);
 
-	lua_pushnumber(L, (player->getYaw() + 90.f) * core::DEGTORAD);
+	lua_pushnumber(L, player->getYaw() * core::DEGTORAD);
 	return 1;
 }
 
@@ -138,6 +155,30 @@ int LuaCamera::l_get_look_vertical(lua_State *L)
 
 	lua_pushnumber(L, -1.0f * player->getPitch() * core::DEGTORAD);
 	return 1;
+}
+
+int
+LuaCamera::l_set_look_horizontal (lua_State *L)
+{
+  LocalPlayer *player = getClient (L)->getEnv ().getLocalPlayer ();
+  float yaw;
+
+  sanity_check (player);
+  yaw = (readParam<float> (L, 2)) * core::RADTODEG;
+  player->setYaw (yaw);
+  return 1;
+}
+
+int
+LuaCamera::l_set_look_vertical (lua_State *L)
+{
+  LocalPlayer *player = getClient (L)->getEnv ().getLocalPlayer ();
+  float pitch;
+
+  sanity_check (player);
+  pitch = readParam<float> (L, 2) * core::RADTODEG;
+  player->setPitch (pitch);
+  return 1;
 }
 
 // get_aspect_ratio(self)
@@ -186,10 +227,13 @@ const luaL_Reg LuaCamera::methods[] = {
 	luamethod(LuaCamera, get_fov),
 	luamethod(LuaCamera, get_pos),
 	luamethod(LuaCamera, get_offset),
+	luamethod(LuaCamera, set_offset),
 	luamethod(LuaCamera, get_look_dir),
 	luamethod(LuaCamera, get_look_vertical),
 	luamethod(LuaCamera, get_look_horizontal),
 	luamethod(LuaCamera, get_aspect_ratio),
+	luamethod(LuaCamera, set_look_vertical),
+	luamethod(LuaCamera, set_look_horizontal),
 
 	{0, 0}
 };

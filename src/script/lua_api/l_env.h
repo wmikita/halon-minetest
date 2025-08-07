@@ -96,6 +96,9 @@ private:
 	// pos = {x=num, y=num, z=num}
 	static int l_get_node_max_level(lua_State *L);
 
+	// collides (aabb3f)
+	static int l_collides (lua_State *);
+
 	// get_node_level(pos)
 	// pos = {x=num, y=num, z=num}
 	static int l_get_node_level(lua_State *L);
