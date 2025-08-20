@@ -48,6 +48,12 @@ using CachedMeshBuffers = std::unordered_map<std::string, CachedMeshBuffer>;
 
 using ModifyMaterialCallback = std::function<void(video::SMaterial& /* material */, bool /* is_foliage */)>;
 
+struct AmbientLightCfg
+{
+  int ambient_level;
+  int range_squeeze;
+};
+
 /*
 	ClientMap
 
@@ -89,6 +95,21 @@ public:
 		return m_box;
 	}
 
+	const AmbientLightCfg *
+	getAmbientLight (void) const
+  	{
+	  return &m_ambient_light;
+	}
+
+	void
+	setAmbientLight (int ambient_light, int light_squeeze)
+	{
+	  m_ambient_light.ambient_level
+	    = std::max (0, std::min (ambient_light, 14));
+	  m_ambient_light.range_squeeze
+	    = std::max (0, std::min (light_squeeze, 255));
+	}
+
 	void getBlocksInViewRange(v3s16 cam_pos_nodes,
 		v3s16 *p_blocks_min, v3s16 *p_blocks_max, float range=-1.0f);
 
@@ -116,6 +137,7 @@ public:
 	void renderPostFx(CameraMode cam_mode);
 
 	void invalidateMapBlockMesh(MapBlockMesh *mesh);
+	void invalidateMapBlockMeshes (void);
 
 	// For debug printing
 	void PrintInfo(std::ostream &out) override;
@@ -185,4 +207,6 @@ private:
 
 	bool m_loops_occlusion_culler;
 	bool m_enable_raytraced_culling;
+
+	AmbientLightCfg m_ambient_light = {0, 0,};
 };

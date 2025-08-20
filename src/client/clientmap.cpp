@@ -1219,6 +1219,61 @@ void ClientMap::invalidateMapBlockMesh(MapBlockMesh *mesh)
 	}
 }
 
+typedef std::pair<int, v3s16> invalidated_mapblock;
+typedef std::vector<invalidated_mapblock> invalidated_mapblock_vec;
+
+class compare_dists
+{
+public:
+  bool
+  operator () (const invalidated_mapblock &pt1,
+	       const invalidated_mapblock &pt2) const
+  {
+    return pt1.first > pt2.first;
+  }
+};
+
+void
+ClientMap::invalidateMapBlockMeshes (void)
+{
+  std::priority_queue<invalidated_mapblock,
+		      invalidated_mapblock_vec,
+		      compare_dists> blocks;
+  v3s16 pos = floatToInt (m_camera_position, BS);
+
+  for (const auto &sector_it : m_sectors)
+    {
+      const MapSector *sector = sector_it.second;
+
+      for (const auto &entry : sector->getBlocks ())
+	{
+	  MapBlock *block = entry.second.get ();
+
+	  /* block->mesh can't be erased here or a block already the
+	     subject of an in-progress mesh update may fail to be
+	     provided to addUpdateMeshTask.  */
+	  if (block->mesh)
+	    {
+	      v3s16 bpos = block->getPos ();
+	      long long dx = pos.X - bpos.X * MAP_BLOCKSIZE;
+	      long long dy = pos.Y - bpos.Y * MAP_BLOCKSIZE;
+	      long long dz = pos.Z - bpos.Z * MAP_BLOCKSIZE;
+	      u64 dist = dx * dx + dy * dy + dz * dz;
+
+	      blocks.push (invalidated_mapblock (dist, bpos));
+	    }
+	}
+    }
+
+  m_client->resetMeshUpdates ();
+  for (; !blocks.empty (); blocks.pop ())
+    {
+      v3s16 bpos = blocks.top ().second;
+      m_client->addUpdateMeshTask (bpos, false, true);
+    }
+  m_client->resumeMeshUpdates ();
+}
+
 static bool getVisibleBrightness(Map *map, const v3f &p0, v3f dir, float step,
 	float step_multiplier, float start_distance, float end_distance,
 	const NodeDefManager *ndef, u32 daylight_factor, float sunlight_min_d,

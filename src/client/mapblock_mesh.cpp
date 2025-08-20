@@ -207,17 +207,12 @@ static u16 getSmoothLightCombined(const v3s16 &p,
 	if (direct_sunlight)
 		light_day = 0xFF;
 
-	// Boost brightness around light sources
-	bool skip_ambient_occlusion_day = false;
 	if (decode_light(light_source_max) >= light_day) {
 		light_day = decode_light(light_source_max);
-		skip_ambient_occlusion_day = true;
 	}
 
-	bool skip_ambient_occlusion_night = false;
 	if(decode_light(light_source_max) >= light_night) {
 		light_night = decode_light(light_source_max);
-		skip_ambient_occlusion_night = true;
 	}
 
 	if (ambient_occlusion > 4) {
@@ -234,10 +229,8 @@ static u16 getSmoothLightCombined(const v3s16 &p,
 		//calculate table index for gamma space multiplier
 		ambient_occlusion -= 5;
 
-		if (!skip_ambient_occlusion_day)
 			light_day = rangelim(core::round32(
 					light_day * light_amount[ambient_occlusion]), 0, 255);
-		if (!skip_ambient_occlusion_night)
 			light_night = rangelim(core::round32(
 					light_night * light_amount[ambient_occlusion]), 0, 255);
 	}

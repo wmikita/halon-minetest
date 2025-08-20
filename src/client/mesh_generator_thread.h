@@ -18,6 +18,7 @@ class MapBlock;
 class MapBlockMesh;
 struct MeshMakeData;
 class Client;
+typedef std::pair<v3s16, unsigned int> PosWithGeneration;
 
 struct QueuedMeshUpdate
 {
@@ -28,6 +29,7 @@ struct QueuedMeshUpdate
 	MeshMakeData *data = nullptr; // This is generated in MeshUpdateQueue::pop()
 	std::vector<MapBlock*> map_blocks;
 	bool urgent = false;
+	PosWithGeneration generation;
 
 	QueuedMeshUpdate() = default;
 	~QueuedMeshUpdate();
@@ -53,11 +55,25 @@ struct QueuedMeshUpdate
 	bool checkSkip(u16 cell_size);
 };
 
+class HashPosWithGeneration
+{
+public:
+  size_t
+  operator() (const PosWithGeneration &p) const
+  {
+    return (((unsigned) p.first.X * 950706376
+	     ^ (unsigned) p.first.Y * 571 ^ p.first.Z * 10249047)
+	    ^ p.second * 12957);
+  }
+};
+
 /*
 	A thread-safe queue of mesh update tasks and a cache of MapBlock data
 */
 class MeshUpdateQueue
 {
+	friend class MeshUpdateManager;
+
 	enum UpdateMode
 	{
 		FORCE_UPDATE,
@@ -85,7 +101,8 @@ public:
 	QueuedMeshUpdate *pop();
 
 	// Marks a position as finished, unblocking the next update
-	void done(v3s16 pos);
+	void done (PosWithGeneration);
+	void resetMeshUpdates (void);
 
 	size_t size()
 	{
@@ -93,11 +110,13 @@ public:
 		return m_queue.size();
 	}
 
+protected:
+	unsigned int m_update_generation = 0;
 private:
 	Client *m_client;
 	std::vector<QueuedMeshUpdate *> m_queue;
 	std::unordered_set<v3s16> m_urgents;
-	std::unordered_set<v3s16> m_inflight_blocks;
+	std::unordered_set<PosWithGeneration, HashPosWithGeneration> m_inflight_blocks;
 	std::mutex m_mutex;
 
 	// TODO: Add callback to update these when g_settings changes, and update all meshes
@@ -115,6 +134,7 @@ struct MeshUpdateResult
 	std::vector<v3s16> ack_list;
 	bool urgent = false;
 	std::vector<MapBlock*> map_blocks;
+	unsigned int generation;
 
 	MeshUpdateResult() = default;
 };
@@ -156,11 +176,12 @@ public:
 	void stop();
 	void wait();
 
+	void resetMeshUpdates (void);
+
 	bool isRunning();
 
 private:
 	void deferUpdate();
-
 
 	MeshUpdateQueue m_queue_in;
 	MutexedQueue<MeshUpdateResult> m_queue_out;

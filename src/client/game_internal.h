@@ -179,6 +179,7 @@ protected:
 	void updateCameraOffset();
 	void updateCamera(f32 dtime);
 	void updateSound(f32 dtime);
+	void updateAmbientLighting (AmbientLightCfg *);
 	void processPlayerInteraction(f32 dtime, bool show_hud);
 	/*!
 	 * Returns the object or node the player is pointing at.

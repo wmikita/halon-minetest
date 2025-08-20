@@ -10,6 +10,9 @@
 #include "client/client.h"
 #include "client/localplayer.h"
 #include <ICameraSceneNode.h>
+#include "client/clientevent.h"
+#include "client/clientmap.h"
+#include "skyparams.h"
 
 LuaCamera::LuaCamera(Camera *m) : m_camera(m)
 {
@@ -242,6 +245,236 @@ LuaCamera::l_reset_wieldmesh_override (lua_State *L)
   return 0;
 }
 
+// set_ambient_lighting (light_level, range_squeeze)
+
+int
+LuaCamera::l_set_ambient_lighting (lua_State *L)
+{
+  Client *client = getClient (L);
+  ClientMap *map = &client->getEnv ().getClientMap ();
+  int lighting = readParam<int> (L, 2, 0);
+  int squeeze = readParam<int> (L, 3, 0);
+  map->setAmbientLight (lighting, squeeze);
+  return 0;
+}
+
+// set_sky (skybox)
+
+int
+LuaCamera::l_set_sky (lua_State *L)
+{
+  SkyboxParams sky_params
+    = SkyboxDefaults::getSkyDefaults ();
+  ClientEvent *event;
+
+  if (!lua_isnoneornil (L, 2))
+    {
+      luaL_checktype (L, 2, LUA_TTABLE);
+      lua_getfield (L, 2, "base_color");
+      if (!lua_isnil (L, -1))
+	read_color (L, -1, &sky_params.bgcolor);
+      lua_pop (L, 1);
+
+      lua_getfield (L, 2, "body_orbit_tilt");
+      if (!lua_isnil (L, -1))
+	sky_params.body_orbit_tilt
+	  = rangelim (readParam <float> (L, -1), -60.0f, 60.0f);
+      lua_pop (L, 1);
+
+      lua_getfield (L, 2, "type");
+      if (!lua_isnil (L, -1))
+	sky_params.type = luaL_checkstring (L, -1);
+      lua_pop (L, 1);
+
+      lua_getfield (L, 2, "textures");
+      sky_params.textures.clear ();
+      if (lua_istable (L, -1) && sky_params.type == "skybox")
+	{
+	  lua_pushnil (L);
+	  while (lua_next (L, -2) != 0)
+	    {
+	      // Key is at index -2 and value at index -1
+	      sky_params.textures.emplace_back (readParam <std::string> (L, -1));
+	      // Removes the value, but keeps the key for iteration
+	      lua_pop (L, 1);
+	    }
+	}
+      lua_pop (L, 1);
+
+      // Validate that we either have six or zero textures
+      if (sky_params.textures.size () != 6 && !sky_params.textures.empty ())
+	throw LuaError ("Skybox expects 6 textures!");
+
+      sky_params.clouds
+	= getboolfield_default (L, 2, "clouds", sky_params.clouds);
+
+      lua_getfield (L, 2, "sky_color");
+      if (lua_istable (L, -1))
+	{
+	  lua_getfield (L, -1, "day_sky");
+	  read_color (L, -1, &sky_params.sky_color.day_sky);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "day_horizon");
+	  read_color (L, -1, &sky_params.sky_color.day_horizon);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "dawn_sky");
+	  read_color (L, -1, &sky_params.sky_color.dawn_sky);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "dawn_horizon");
+	  read_color (L, -1, &sky_params.sky_color.dawn_horizon);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "night_sky");
+	  read_color (L, -1, &sky_params.sky_color.night_sky);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "night_horizon");
+	  read_color (L, -1, &sky_params.sky_color.night_horizon);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "indoors");
+	  read_color (L, -1, &sky_params.sky_color.indoors);
+	  lua_pop (L, 1);
+
+	  // Prevent flickering clouds at dawn/dusk:
+	  sky_params.fog_sun_tint = video::SColor (255, 255, 255, 255);
+	  lua_getfield (L, -1, "fog_sun_tint");
+	  read_color (L, -1, &sky_params.fog_sun_tint);
+	  lua_pop (L, 1);
+
+	  sky_params.fog_moon_tint = video::SColor (255, 255, 255, 255);
+	  lua_getfield (L, -1, "fog_moon_tint");
+	  read_color (L, -1, &sky_params.fog_moon_tint);
+	  lua_pop (L, 1);
+
+	  lua_getfield (L, -1, "fog_tint_type");
+	  if (!lua_isnil (L, -1))
+	    sky_params.fog_tint_type = luaL_checkstring (L, -1);
+	  lua_pop (L, 1);
+	}
+      lua_pop (L, 1);
+
+      lua_getfield (L, 2, "fog");
+      if (lua_istable (L, -1))
+	{
+	  sky_params.fog_distance = getintfield_default (L, -1,
+							 "fog_distance",
+							 sky_params.
+							 fog_distance);
+	  sky_params.fog_start
+	    = getfloatfield_default (L, -1, "fog_start", sky_params.fog_start);
+
+	  lua_getfield (L, -1, "fog_color");
+	  read_color (L, -1, &sky_params.fog_color);
+	  lua_pop (L, 1);
+	}
+      lua_pop (L, 1);
+    }
+
+  event = new ClientEvent ();
+  event->type = CE_SET_SKY;
+  event->set_sky = new SkyboxParams (sky_params);
+  getClient (L)->pushToEventQueue (event);
+  return 0;
+}
+
+// set_moon (moon_params)
+
+int
+LuaCamera::l_set_moon (lua_State *L)
+{
+  MoonParams moon_params = SkyboxDefaults::getMoonDefaults ();
+  ClientEvent *event;
+
+  if (!lua_isnoneornil (L, 2))
+    {
+      luaL_checktype (L, 2, LUA_TTABLE);
+      moon_params.visible
+	= getboolfield_default (L, 2, "visible", moon_params.visible);
+      moon_params.texture
+	= getstringfield_default (L, 2, "texture", moon_params.texture);
+      moon_params.tonemap
+	= getstringfield_default (L, 2, "tonemap", moon_params.tonemap);
+      moon_params.scale
+	= getfloatfield_default (L, 2, "scale", moon_params.scale);
+    }
+
+  event = new ClientEvent ();
+  event->type = CE_SET_MOON;
+  event->moon_params = new MoonParams (moon_params);
+  getClient (L)->pushToEventQueue (event);
+  return 0;
+}
+
+// set_sun (sun_params)
+
+int
+LuaCamera::l_set_sun (lua_State *L)
+{
+  SunParams sun_params = SkyboxDefaults::getSunDefaults ();
+  ClientEvent *event;
+
+  if (!lua_isnoneornil (L, 2))
+    {
+      luaL_checktype (L, 2, LUA_TTABLE);
+      sun_params.visible
+	= getboolfield_default (L, 2, "visible", sun_params.visible);
+      sun_params.texture
+	= getstringfield_default (L, 2, "texture", sun_params.texture);
+      sun_params.tonemap
+	= getstringfield_default (L, 2, "tonemap", sun_params.tonemap);
+      sun_params.sunrise
+	= getstringfield_default (L, 2, "sunrise", sun_params.sunrise);
+      sun_params.sunrise_visible
+	= getboolfield_default (L, 2, "sunrise_visible", sun_params.sunrise_visible);
+      sun_params.scale
+	= getfloatfield_default (L, 2,  "scale", sun_params.scale);
+    }
+
+  event = new ClientEvent ();
+  event->type = CE_SET_SUN;
+  event->sun_params = new SunParams (sun_params);
+  getClient (L)->pushToEventQueue (event);
+  return 0;
+}
+
+// set_stars (star_params)
+
+int
+LuaCamera::l_set_stars (lua_State *L)
+{
+  StarParams star_params = SkyboxDefaults::getStarDefaults ();
+  ClientEvent *event;
+
+  if (!lua_isnoneornil (L, 2))
+    {
+      luaL_checktype (L, 2, LUA_TTABLE);
+      star_params.visible
+	= getboolfield_default(L, 2, "visible", star_params.visible);
+      star_params.count
+	= getintfield_default(L, 2,  "count",   star_params.count);
+
+      lua_getfield (L, 2, "star_color");
+      if (!lua_isnil (L, -1))
+	read_color (L, -1, &star_params.starcolor);
+      lua_pop (L, 1);
+      star_params.scale
+	= getfloatfield_default (L, 2, "scale", star_params.scale);
+      star_params.day_opacity
+	= getfloatfield_default (L, 2, "day_opacity", star_params.day_opacity);
+    }
+
+  event = new ClientEvent ();
+  event->type = CE_SET_STARS;
+  event->star_params = new StarParams (star_params);
+  getClient (L)->pushToEventQueue (event);
+  return 0;
+}
+
+
 Camera *LuaCamera::getobject(LuaCamera *ref)
 {
 	return ref->m_camera;
@@ -287,6 +520,11 @@ const luaL_Reg LuaCamera::methods[] = {
 	luamethod(LuaCamera, update_wield_item),
 	luamethod (LuaCamera, override_wieldmesh),
 	luamethod (LuaCamera, reset_wieldmesh_override),
+	luamethod (LuaCamera, set_ambient_lighting),
+	luamethod (LuaCamera, set_sky),
+	luamethod (LuaCamera, set_moon),
+	luamethod (LuaCamera, set_sun),
+	luamethod (LuaCamera, set_stars),
 
 	{0, 0}
 };

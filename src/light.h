@@ -22,6 +22,7 @@
 #define LIGHT_SUN 15
 
 #if IS_CLIENT_BUILD
+#include <mutex>
 
 /**
  * \internal
@@ -36,6 +37,7 @@
  *
  */
 extern const u8 *light_decode_table;
+extern std::mutex gamma_curve_lock;
 
 // 0 <= light <= LIGHT_SUN
 // 0 <= return value <= 255
@@ -51,7 +53,7 @@ inline u8 decode_light(u8 light)
 // 0.0 <= return value <= 1.0
 float decode_light_f(float light_f);
 
-void set_light_table(float gamma);
+void set_light_table (float, int, int);
 
 #endif
 

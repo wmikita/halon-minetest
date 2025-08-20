@@ -151,6 +151,7 @@ bool MeshUpdateQueue::addBlock(Map *map, v3s16 p, bool ack_block_to_server,
 	q->crack_pos = m_client->getCrackPos();
 	q->urgent = urgent;
 	q->retrieveBlocks(map, mesh_grid.cell_size);
+	q->generation = PosWithGeneration (q->p, m_update_generation);
 
 	/*
 		Air blocks won't suddenly become visible due to a neighbor update, so
@@ -184,11 +185,11 @@ QueuedMeshUpdate *MeshUpdateQueue::pop()
 			if (must_be_urgent && m_urgents.count(q->p) == 0)
 				continue;
 			// Make sure no two threads are processing the same mapblock, as that causes racing conditions
-			if (m_inflight_blocks.find(q->p) != m_inflight_blocks.end())
+			if (m_inflight_blocks.find(q->generation) != m_inflight_blocks.end())
 				continue;
 			m_queue.erase(i);
 			m_urgents.erase(q->p);
-			m_inflight_blocks.insert(q->p);
+			m_inflight_blocks.insert (q->generation);
 			result = q;
 			break;
 		}
@@ -200,12 +201,18 @@ QueuedMeshUpdate *MeshUpdateQueue::pop()
 	return result;
 }
 
-void MeshUpdateQueue::done(v3s16 pos)
+void MeshUpdateQueue::done (PosWithGeneration pos)
 {
-	MutexAutoLock lock(m_mutex);
-	m_inflight_blocks.erase(pos);
+  MutexAutoLock lock(m_mutex);
+  m_inflight_blocks.erase(pos);
 }
 
+void
+MeshUpdateQueue::resetMeshUpdates (void)
+{
+  MutexAutoLock lock (m_mutex);
+  m_update_generation++;
+}
 
 void MeshUpdateQueue::fillDataFromMapBlocks(QueuedMeshUpdate *q)
 {
@@ -243,7 +250,7 @@ void MeshUpdateWorkerThread::doUpdate()
 	QueuedMeshUpdate *q;
 	while ((q = m_queue_in->pop())) {
 		ScopeProfiler sp(g_profiler, "Client: Mesh making (sum)");
-
+		MutexAutoLock lock (gamma_curve_lock);
 		// This generates the mesh:
 		MapBlockMesh *mesh_new = new MapBlockMesh(m_client, q->data);
 
@@ -254,9 +261,10 @@ void MeshUpdateWorkerThread::doUpdate()
 		r.ack_list = std::move(q->ack_list);
 		r.urgent = q->urgent;
 		r.map_blocks = std::move(q->map_blocks);
+		r.generation = q->generation.second;
 
 		m_manager->putResult(r);
-		m_queue_in->done(q->p);
+		m_queue_in->done(q->generation);
 		delete q;
 		sp.stop();
 
@@ -366,4 +374,10 @@ bool MeshUpdateManager::isRunning()
 		if (thread->isRunning())
 			return true;
 	return false;
+}
+
+void
+MeshUpdateManager::resetMeshUpdates (void)
+{
+  m_queue_in.resetMeshUpdates ();
 }

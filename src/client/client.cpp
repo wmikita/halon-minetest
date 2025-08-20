@@ -1849,6 +1849,18 @@ void Client::addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server, bool ur
 		addUpdateMeshTask(blockpos + v3s16(0, 0, -1), false, urgent);
 }
 
+void
+Client::resetMeshUpdates (void)
+{
+  m_mesh_update_manager->resetMeshUpdates ();
+}
+
+void
+Client::resumeMeshUpdates (void)
+{
+  /* Nothing here but crickets.  */
+}
+
 ClientEvent *Client::getClientEvent()
 {
 	FATAL_ERROR_IF(m_client_event_queue.empty(),

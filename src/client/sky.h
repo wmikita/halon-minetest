@@ -131,6 +131,12 @@ public:
 		return m_sky_params.auto_dim_skybox;
 	}
 
+	const SkyboxParams &
+	getSkyParams (void) const
+	{
+	  return m_sky_params;
+	}
+
 private:
 	aabb3f m_box{{0.0f, 0.0f, 0.0f}};
 	video::SMaterial m_materials[SKY_MATERIAL_COUNT];

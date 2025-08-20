@@ -21,6 +21,8 @@
 #include <set>
 #include <unordered_set>
 #include <vector>
+#include "config.h"
+#include "sky.h"
 
 #if !IS_CLIENT_BUILD
 #error Do not include in server builds
@@ -301,6 +303,9 @@ public:
 	void addUpdateMeshTaskWithEdge(v3s16 blockpos, bool ack_to_server=false, bool urgent=false);
 	void addUpdateMeshTaskForNode(v3s16 nodepos, bool ack_to_server=false, bool urgent=false);
 
+	void resetMeshUpdates (void);
+	void resumeMeshUpdates (void);
+
 	bool hasClientEvents() const { return !m_client_event_queue.empty(); }
 	// Get event from queue. If queue is empty, it triggers an assertion failure.
 	ClientEvent * getClientEvent();
@@ -439,6 +444,18 @@ public:
 	}
 
 	bool inhibit_inventory_revert = false;
+
+	void
+	setSky (Sky *sky)
+	{
+	  m_sky = sky;
+	}
+
+	Sky *
+	getSky (void)
+	{
+	  return m_sky;
+	}
 
 private:
 	struct PendingMediaDownload {
@@ -607,4 +624,6 @@ private:
 
 	// The number of blocks the client will combine for mesh generation.
 	MeshGrid m_mesh_grid;
+
+	Sky *m_sky;
 };

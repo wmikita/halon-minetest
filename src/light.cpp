@@ -14,7 +14,7 @@ static u8 light_LUT[LIGHT_SUN + 1];
 
 // The const ref to light_LUT is what is actually used in the code
 const u8 *light_decode_table = light_LUT;
-
+std::mutex gamma_curve_lock;
 
 struct LightingParams {
 	float a, b, c; // Lighting curve polynomial coefficients
@@ -42,11 +42,12 @@ float decode_light_f(float x)
 
 
 // Initialize or update the light value tables using the specified gamma
-void set_light_table(float gamma)
+void set_light_table(float gamma, int ambient_light, int min_light_value)
 {
 // Lighting curve bounding gradients
 	const float alpha = rangelim(g_settings->getFloat("lighting_alpha"), 0.0f, 3.0f);
 	const float beta  = rangelim(g_settings->getFloat("lighting_beta"), 0.0f, 3.0f);
+	int light_range = 255 - min_light_value;
 // Lighting curve polynomial coefficients
 	params.a = alpha + beta - 2.0f;
 	params.b = 3.0f - 2.0f * alpha - beta;
@@ -59,14 +60,23 @@ void set_light_table(float gamma)
 	params.gamma = rangelim(gamma, 0.33f, 3.0f);
 
 // Boundary values should be fixed
-	light_LUT[0] = 0;
+	light_LUT[0] = min_light_value;
 	light_LUT[LIGHT_SUN] = 255;
 
-	for (size_t i = 1; i < LIGHT_SUN; i++) {
-		float brightness = decode_light_f((float)i / LIGHT_SUN);
+	if (ambient_light > 0)
+	  {
+	    float brightness = decode_light_f ((float) ambient_light / LIGHT_SUN);
+	    light_LUT[0] = brightness * (255 - min_light_value);
+	  }
+
+	for (int i = 1; i < LIGHT_SUN; i++) {
+	  int level = std::max (i, ambient_light);
+	  float brightness = decode_light_f((float) level / LIGHT_SUN);
 		// Strictly speaking, rangelim is not necessary here—if the implementation
 		// is conforming. But we don’t want problems in any case.
-		light_LUT[i] = rangelim((s32)(255.0f * brightness), 0, 255);
+		light_LUT[i] = (rangelim ((s32)((float) light_range * brightness),
+					  0, light_range)
+				+ min_light_value);
 
 		// Ensure light brightens with each level
 		if (i > 0 && light_LUT[i] <= light_LUT[i - 1]) {

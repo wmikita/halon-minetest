@@ -33,6 +33,11 @@ private:
 	static int l_update_wield_item (lua_State *);
 	static int l_override_wieldmesh (lua_State *);
 	static int l_reset_wieldmesh_override (lua_State *);
+	static int l_set_ambient_lighting (lua_State *);
+	static int l_set_sky (lua_State *);
+	static int l_set_sun (lua_State *);
+	static int l_set_moon (lua_State *);
+	static int l_set_stars (lua_State *);
 
 	static Camera *getobject(LuaCamera *ref);
 	static Camera *getobject(lua_State *L, int narg);

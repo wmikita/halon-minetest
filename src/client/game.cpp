@@ -485,6 +485,8 @@ void Game::run()
 	CameraOrientation cam_view = {};
 	FpsControl draw_times;
 	f32 dtime; // in seconds
+	AmbientLightCfg ambient_light;
+	memset (&ambient_light, 0, sizeof ambient_light);
 
 	// Clear the profiler
 	{
@@ -494,7 +496,7 @@ void Game::run()
 
 	draw_times.reset();
 
-	set_light_table(g_settings->getFloat("display_gamma"));
+	set_light_table (g_settings->getFloat("display_gamma"), 0, 0);
 
 	m_touch_simulate_aux1 = g_settings->getBool("fast_move")
 			&& client->checkPrivilege("fast");
@@ -541,7 +543,7 @@ void Game::run()
 		}
 
 		// Prepare render data for next iteration
-
+		updateAmbientLighting (&ambient_light);
 		updateStats(&stats, draw_times, dtime);
 		updateInteractTimers(dtime);
 
@@ -893,6 +895,7 @@ bool Game::createClient(const GameStartData &start_data)
 	 */
 	sky = make_irr<Sky>(-1, m_rendering_engine, texture_src, shader_src);
 	scsf->setSky(sky.get());
+	client->setSky (sky.get ());
 
 	if (!initGui())
 		return false;
@@ -2643,6 +2646,22 @@ void Game::updateSound(f32 dtime)
 			nodedef_manager->get(n).sound_footstep);
 }
 
+void
+Game::updateAmbientLighting (AmbientLightCfg *previous_light_level)
+{
+  ClientMap *map = &client->getEnv ().getClientMap ();
+  const AmbientLightCfg *cfg = map->getAmbientLight ();
+  if (previous_light_level->ambient_level != cfg->ambient_level
+      || previous_light_level->range_squeeze != cfg->range_squeeze)
+    {
+      MutexAutoLock lock (gamma_curve_lock);
+
+      set_light_table (g_settings->getFloat("display_gamma"),
+		       cfg->ambient_level, cfg->range_squeeze);
+      *previous_light_level = *cfg;
+      map->invalidateMapBlockMeshes ();
+    }
+}
 
 void Game::processPlayerInteraction(f32 dtime, bool show_hud)
 {
