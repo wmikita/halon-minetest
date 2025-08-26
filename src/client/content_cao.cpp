@@ -378,6 +378,21 @@ void GenericCAO::updateParentChain() const
 {
 	if (!m_matrixnode)
 		return;
+	/* Update the top-most parent's node position lest it have not
+	   yet been updated to agree with adjustments in the camera
+	   offset.  */
+	{
+	  ClientActiveObject *cao;
+	  GenericCAO *toplevel;
+
+	  for (cao = this->getParent ();
+	       cao->getParent () != NULL;
+	       cao = cao->getParent ())
+	    ;
+	  if ((toplevel = dynamic_cast<GenericCAO *> (cao)))
+	    toplevel->updateNodePos ();
+	}
+
 	// Update the entire chain of nodes to ensure absolute position is correct
 	std::vector<scene::ISceneNode *> chain;
 	for (scene::ISceneNode *node = m_matrixnode; node; node = node->getParent())
