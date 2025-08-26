@@ -1269,7 +1269,7 @@ ClientMap::invalidateMapBlockMeshes (void)
   for (; !blocks.empty (); blocks.pop ())
     {
       v3s16 bpos = blocks.top ().second;
-      m_client->addUpdateMeshTask (bpos, false, true);
+      m_client->addUpdateMeshTask (bpos, false, false);
     }
   m_client->resumeMeshUpdates ();
 }
