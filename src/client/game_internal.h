@@ -34,6 +34,7 @@ class ProfilerGraph;
 class EventManager;
 class GUIChatConsole;
 class QuicktuneShortcutter;
+struct AmbientLightCfg;
 
 const static float object_hit_delay = 0.2;
 
