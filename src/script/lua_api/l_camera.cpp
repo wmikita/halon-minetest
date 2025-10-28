@@ -216,7 +216,7 @@ LuaCamera::l_update_wield_item (lua_State *L)
   return 0;
 }
 
-// override_wieldmesh (pos, rot, transition_time)
+// override_wieldmesh (pos, rot, transition_time, compose_or_offset)
 
 int
 LuaCamera::l_override_wieldmesh (lua_State *L)
@@ -230,7 +230,8 @@ LuaCamera::l_override_wieldmesh (lua_State *L)
   if (!camera)
     return 0;
 
-  camera->overrideWieldmesh (&pos, &rot, std::max (0.0f, transition));
+  camera->overrideWieldmesh (&pos, &rot, std::max (0.0f, transition),
+			     lua_toboolean (L, 5));
   return 0;
 }
 

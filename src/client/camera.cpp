@@ -313,6 +313,31 @@ void Camera::updateOffset()
 	// No need to update m_cameranode as that will be done before the next render.
 }
 
+bool
+Camera::get_wieldmesh_override (v3f *pos, v3f *rot, v3f *initial_pos,
+				v3f *initial_rot)
+{
+  if (m_wieldmesh_overridden && !m_wieldmesh_is_offset)
+    {
+      *pos = m_local_wieldmesh_position;
+      *rot = m_local_wieldmesh_rotation;
+      return true;
+    }
+  else if (m_wieldmesh_overridden)
+    {
+      core::quaternion q_initial_rot (*initial_rot * core::DEGTORAD);
+      core::quaternion q_local_rot (m_local_wieldmesh_rotation * core::DEGTORAD);
+      v3f angles;
+
+      *pos = m_local_wieldmesh_position + *initial_pos;
+      (q_local_rot * q_initial_rot).toEuler (angles);
+      *initial_rot = angles * core::RADTODEG;
+      return true;
+    }
+
+  return false;
+}
+
 void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 {
 	// Get player position
@@ -556,12 +581,8 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 
 	    /* Transition between the locally provided value and the
 	       default, or vice versa, as the case may be.  */
-	    if (m_wieldmesh_overridden)
-	      {
-		new_pos = m_local_wieldmesh_position;
-		new_rot = m_local_wieldmesh_rotation;
-	      }
-	    else
+	    if (!get_wieldmesh_override (&new_pos, &new_rot,
+					 &wield_position, &wield_rotation))
 	      {
 		new_pos = wield_position;
 		new_rot = wield_rotation;
@@ -587,11 +608,9 @@ void Camera::update(LocalPlayer* player, f32 frametime, f32 tool_reload_ratio)
 	    if (progress == 1.0)
 	      m_wieldmesh_transition_active = false;
 	  }
-	else if (m_wieldmesh_overridden)
-	  {
-	    wield_rotation = m_local_wieldmesh_rotation;
-	    wield_position = m_local_wieldmesh_position;
-	  }
+	else
+	  get_wieldmesh_override (&wield_position, &wield_rotation,
+				  &wield_position, &wield_rotation);
 
 	m_wieldnode->setPosition(wield_position);
 	m_wieldnode->setRotation(wield_rotation);
@@ -811,11 +830,13 @@ std::array<core::plane3d<f32>, 4> Camera::getFrustumCullPlanes() const
 }
 
 void
-Camera::overrideWieldmesh (v3f *position, v3f *rotation, f32 transition_time)
+Camera::overrideWieldmesh (v3f *position, v3f *rotation, f32 transition_time,
+			   bool compose_or_offset)
 {
   m_local_wieldmesh_position = *position;
   m_local_wieldmesh_rotation = *rotation;
   m_wieldmesh_overridden = true;
+  m_wieldmesh_is_offset = compose_or_offset;
 
   if (transition_time > 0.0)
     {

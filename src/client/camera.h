@@ -181,13 +181,15 @@ public:
 
 	inline void addArmInertia(f32 player_yaw);
 
-	void overrideWieldmesh (v3f *, v3f *, f32);
+	void overrideWieldmesh (v3f *, v3f *, f32, bool);
 	void resetWieldmeshOverride (f32);
 
 private:
 	// Use getFrustumCuller().
 	// This helper just exists to decrease the header's number of includes.
 	std::array<core::plane3d<f32>, 4> getFrustumCullPlanes() const;
+
+	bool get_wieldmesh_override (v3f *, v3f *, v3f *, v3f *);
 
 	// Nodes
 	scene::ISceneNode *m_playernode = nullptr;
@@ -234,6 +236,7 @@ private:
 	v3f m_local_wieldmesh_rotation;
 	v3f m_local_wieldmesh_position;
 	bool m_wieldmesh_overridden = false;
+	bool m_wieldmesh_is_offset = false;
 	bool m_wieldmesh_transition_active = false;
 	f32 m_wieldmesh_transition_time, m_trans_delta;
 
