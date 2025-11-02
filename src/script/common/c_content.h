@@ -53,6 +53,7 @@ struct SoundSpec;
 struct TileDef;
 struct ToolCapabilities;
 struct WearBarParams;
+struct BoneOverride;
 
 namespace Json { class Value; }
 namespace treegen { struct TreeDef; }

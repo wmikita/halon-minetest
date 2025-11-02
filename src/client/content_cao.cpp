@@ -2188,13 +2188,13 @@ GenericCAO::setBoneOverride (std::string bone, BoneOverride *props)
 	}
 
       value.position.vector = props->position.vector;
-      value.position.interp_timer = props->position.interp_timer;
+      value.position.interp_duration = props->position.interp_duration;
       value.position.absolute = props->position.absolute;
       value.rotation.next = props->rotation.next;
-      value.rotation.interp_timer = props->rotation.interp_timer;
+      value.rotation.interp_duration = props->rotation.interp_duration;
       value.rotation.absolute = props->rotation.absolute;
       value.scale.vector = props->scale.vector;
-      value.scale.interp_timer = props->scale.interp_timer;
+      value.scale.interp_duration = props->scale.interp_duration;
       value.scale.absolute = props->scale.absolute;
     }
   else
