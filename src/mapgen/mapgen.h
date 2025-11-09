@@ -124,11 +124,17 @@ struct MapgenParams {
 
 	BiomeParams *bparams = nullptr;
 
+  inline bool
+  chunk_origin_overloaded_p (void) const
+  {
+    return (explicit_chunk_origin.X <= 0
+	    && explicit_chunk_origin.Y <= 0
+	    && explicit_chunk_origin.Z <= 0);
+  }
+
   inline v3s16 get_chunk_origin (void) const
   {
-    return ((explicit_chunk_origin.X <= 0
-	     && explicit_chunk_origin.Y <= 0
-	     && explicit_chunk_origin.Z <= 0)
+    return (chunk_origin_overloaded_p ()
 	    ? explicit_chunk_origin : -chunksize / 2);
   };
 

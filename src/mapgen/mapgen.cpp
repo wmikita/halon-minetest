@@ -1135,7 +1135,8 @@ void MapgenParams::writeParams(Settings *settings) const
 		settings->setV3F("chunksize", v3f::from(chunksize));
 	}
 
-	settings->setV3F ("chunk_origin", v3f::from (get_chunk_origin ()));
+	if (chunk_origin_overloaded_p ())
+	  settings->setV3F ("chunk_origin", v3f::from (get_chunk_origin ()));
 
 	if (bparams)
 		bparams->writeParams(settings);
