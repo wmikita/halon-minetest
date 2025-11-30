@@ -1369,7 +1369,7 @@ ParticleManager::step_volume_spawners (float dtime)
 	       x <= pos.X + tem->range_horizontal; ++x)
 	    {
 	      v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
-	      PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, ymin, x), 0xdc321c6bu) + tem->id);
+	      PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, 0, x), 0xdc321c6bu) + tem->id);
 	      int i, count = pr.range (tem->particles_per_column + 1);
 	      int height = tem->above_heightmap_p ? map.index_height_map (x, z) : 0;
 	      int hmmin = (tem->above_heightmap_p ? std::max (height, ymin) : ymin);
@@ -1392,7 +1392,7 @@ ParticleManager::step_volume_spawners (float dtime)
 		  float delta = lpr (offset * tem->period + t, tem->period);
 		  v3f velocity = random_velocity (iseed_1, tem);
 		  v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
-				    ymin + lpr (velocity.Y * delta, ymax - ymin),
+				    ymin + lpr (velocity.Y * delta - ymin, ymax - ymin),
 				    z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
 		  if (particle_pos.Y >= hmmin && particle_pos.Y <= hmmax)
 		    {
