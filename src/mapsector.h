@@ -61,6 +61,8 @@ public:
 
 	size_t size() const { return m_blocks.size(); }
 
+	MapBlock *getBlockUncached (s16);
+
 protected:
 
 	// The pile of MapBlocks

@@ -215,6 +215,9 @@ ClientMap::~ClientMap()
 
 	for (auto &it : m_dynamic_buffers)
 		it.second.drop();
+
+	for (auto &it : m_heightmaps)
+	  free (it.second);
 }
 
 void ClientMap::updateCamera(v3f pos, v3f dir, f32 fov, v3s16 offset, video::SColor light_color)
@@ -1653,6 +1656,8 @@ void ClientMap::updateDrawListShadow(v3f shadow_light_pos, v3f shadow_light_dir,
 void ClientMap::reportMetrics(u64 save_time_us, u32 saved_blocks, u32 all_blocks)
 {
 	g_profiler->avg("CM::reportMetrics loaded blocks [#]", all_blocks);
+	g_profiler->avg("CM::reportMetrics loaded heightmaps [#]",
+			m_heightmaps.size ());
 }
 
 void ClientMap::updateTransparentMeshBuffers()
@@ -1765,4 +1770,199 @@ bool ClientMap::isMeshOccluded(MapBlock *mesh_block, u16 mesh_size, v3s16 cam_po
 	}
 
 	return true;
+}
+
+
+
+/* Heightmap management.  */
+
+#define TOBLOCK(x) (((x) + 0x8000) / MAP_BLOCKSIZE - (0x8000 / MAP_BLOCKSIZE))
+#define MIN_BLOCK (S16_MIN / MAP_BLOCKSIZE)
+
+static s16
+heightmap_scan (ClientMap *map, const NodeDefManager *ndef, v2s16 pos,
+		v3s16 relpos, s16 y)
+{
+  int by = TOBLOCK (y);
+  int sy = y - by * MAP_BLOCKSIZE;
+  MapSector *sector = map->getSectorNoGenerate (pos);
+
+  for (; by >= -2048; --by)
+    {
+      MapBlock *block = sector->getBlockUncached (by);
+      int iy;
+
+      if (!block || block->isAir ())
+	continue;
+
+      for (iy = sy; iy >= 0; --iy)
+	{
+	  bool dummy;
+
+	  relpos.Y = iy;
+	  if (ndef->get (block->getNode (relpos, &dummy)).walkable)
+	    return iy + by * MAP_BLOCKSIZE;
+	}
+      sy = MAP_BLOCKSIZE - 1;
+    }
+
+  return S16_MIN;
+}
+
+static bool
+walkable_or_liquid (const ContentFeatures &cf)
+{
+  return cf.walkable || cf.liquid_type != LIQUID_NONE;
+}
+
+void
+ClientMap::post_update_node (MapBlock *block, v3s16 relpos, MapNode old_node,
+			     MapNode node)
+{
+  if (block->holds_heightmap_reference_p)
+    {
+      Heightmap *map;
+      const NodeDefManager *ndef = m_client->getNodeDefManager ();
+      v2s16 heightmap_pos (block->getPos ().X, block->getPos ().Z);
+      s16 curheight;
+      bool new_node = walkable_or_liquid (ndef->get (node));
+      int i = relpos.Z * MAP_BLOCKSIZE + relpos.X;
+
+      map = m_heightmaps[heightmap_pos];
+      assert (map != NULL);
+      curheight = map->first_opaque[i];
+      {
+	s16 y = block->getPosRelative ().Y + relpos.Y;
+	if (new_node && curheight < y)
+	  map->first_opaque[i] = y;
+	else if (curheight == y && !new_node)
+	  map->first_opaque[i]
+	    = heightmap_scan (this, ndef, heightmap_pos, relpos, y - 1);
+      }
+    }
+}
+
+void
+ClientMap::post_insert_block (MapBlock *block)
+{
+  v3s16 blockpos = block->getPos ();
+  v2s16 heightmap_pos (blockpos.X, blockpos.Z);
+  Heightmap *heightmap;
+  s16 posns[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
+  auto it = m_heightmaps.find (heightmap_pos);
+
+  if (block->isAir ())
+    return;
+
+  /* Take a heightmap reference if none yet exists.  */
+  if (it == m_heightmaps.end ())
+    {
+      int i;
+
+      assert (!block->holds_heightmap_reference_p);
+      heightmap = (Heightmap *) malloc (sizeof (struct Heightmap));
+      heightmap->refcount = 0;
+      for (i = 0; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i)
+	heightmap->first_opaque[i] = S16_MIN;
+      m_heightmaps[heightmap_pos] = heightmap;
+    }
+  else
+    {
+      heightmap = it->second;
+      assert (heightmap != NULL);
+    }
+
+  if (!block->holds_heightmap_reference_p)
+    heightmap->refcount++;
+  block->holds_heightmap_reference_p = true;
+
+  /* Build a map of the heights of opaque nodes within this
+     mapblock.  */
+  {
+    int i, y, min_y = blockpos.Y * MAP_BLOCKSIZE;
+    const NodeDefManager *ndef = m_client->getNodeDefManager ();
+
+    for (i = 0; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i)
+      {
+	int x = i % MAP_BLOCKSIZE;
+	int z = i / MAP_BLOCKSIZE;
+
+	posns[i] = min_y - 1;
+	for (y = MAP_BLOCKSIZE - 1; y >= 0; --y)
+	  {
+	    bool dummy;
+	    MapNode node = block->getNode (v3s16 (x, y, z), &dummy);
+	    bool new_node = walkable_or_liquid (ndef->get (node));
+
+	    if (new_node)
+	      {
+		posns[i] = y + min_y;
+		break;
+	      }
+	  }
+      }
+
+    /* Iterate over each position in this map and correct the
+       heightmap data there.  */
+
+    for (i = 0; i < MAP_BLOCKSIZE * MAP_BLOCKSIZE; ++i)
+      {
+	int x = i % MAP_BLOCKSIZE;
+	int z = i / MAP_BLOCKSIZE;
+	s16 dst_block = TOBLOCK (heightmap->first_opaque[i]);
+
+	if (posns[i] >= min_y
+	    /* An opaque node was placed above the entry in the
+	       heightmap.  */
+	    && (heightmap->first_opaque[i] < posns[i]
+		/* Or the top opaque node was adjusted within a single
+		   block.  */
+		|| (dst_block == blockpos.Y && posns[i])))
+	  heightmap->first_opaque[i] = posns[i];
+	else if (dst_block == blockpos.Y)
+	  /* The heightmap value previously present in this block can
+	     no longer be accounted for.  Rescan this column to fix
+	     its topmost position.  */
+	  heightmap->first_opaque[i]
+	    = heightmap_scan (this, ndef, heightmap_pos,
+			      v3s16 (x, 0, z), posns[i]);
+      }
+  }  
+}
+
+void
+ClientMap::post_condemn_block (MapBlock *block)
+{
+  if (block->holds_heightmap_reference_p)
+    {
+      v2s16 pos = v2s16 (block->getPos ().X, block->getPos ().Z);
+      Heightmap *heightmap = m_heightmaps[pos];
+      assert (heightmap != NULL && heightmap->refcount > 0);
+
+      if (!(--heightmap->refcount))
+	{
+	  m_heightmaps.erase (pos);
+	  free (heightmap);
+	}
+
+      /* Heightmap values within the same column will not be adjusted
+	 till this block is loaded again...  */
+      block->holds_heightmap_reference_p = false;
+    }
+}
+
+s16
+ClientMap::index_height_map (s16 x, s16 z)
+{
+  v2s16 pos (TOBLOCK (x), TOBLOCK (z));
+
+  auto it = m_heightmaps.find (pos);
+  if (it != m_heightmaps.end ())
+    {
+      int ix = x - pos.X * MAP_BLOCKSIZE;
+      int iz = z - pos.Y * MAP_BLOCKSIZE;
+      return it->second->first_opaque[iz * MAP_BLOCKSIZE + ix];
+    }
+
+  return S16_MIN;
 }

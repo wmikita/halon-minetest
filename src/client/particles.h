@@ -169,6 +169,8 @@ public:
 	std::optional<u16> allocate();
 	/// Frees the particle at `index`
 	void release(u16 index);
+	typedef std::vector<u16>::const_iterator u16_const_iterator;
+	void release_bulk (u16_const_iterator, u16_const_iterator);
 
 	/// @return video::S3DVertex[4]
 	video::S3DVertex *getVertices(u16 index);
@@ -182,6 +184,12 @@ public:
 	}
 	virtual u32 getMaterialCount() const override {
 		return 1;
+	}
+
+	inline u64
+	get_id (void)
+	{
+	  return id;
 	}
 
 	virtual const core::aabbox3df &getBoundingBox() const override;
@@ -202,7 +210,47 @@ private:
 	// total count of contained particles
 	u16 m_count = 0;
 	mutable bool m_bounding_box_dirty = true;
+
+	/* Unique ID.  */
+	u64 id;
 };
+
+typedef short heightmap_block[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
+class VolumeParticleSpawner;
+typedef std::unordered_map<u64, std::vector<u16>> buffer_slot_list;
+
+class VolumeParticleSpawner
+{
+public:
+  VolumeParticleSpawner () = default;
+  VolumeParticleSpawner (VolumeParticleSpawner &&) = default;
+  VolumeParticleSpawner &operator= (VolumeParticleSpawner &&) = default;
+
+  std::vector<ClientParticleTexture> m_texpool;
+  std::vector<video::SMaterial> m_materials;
+  buffer_slot_list m_slots;
+
+  u64 id;
+
+  video::SColor color = video::SColor (255, 255, 255, 255);
+  v2f texpos = v2f (0.0f, 0.0f);
+  v2f texsize = v2f (1.0f, 1.0f);
+
+  v3f velocity_min;
+  v3f velocity_max;
+  float period;
+  float size;
+  float sx, sy;
+
+  s16 particles_per_column;
+  s16 range_horizontal;
+  s16 range_vertical;
+
+  bool above_heightmap_p : 1; /* TODO */
+};
+
+class ClientMap;
+struct VolumeParticleData;
 
 /**
  * Class doing particle as well as their spawners handling
@@ -211,7 +259,7 @@ class ParticleManager
 {
 	friend class ParticleSpawner;
 public:
-	ParticleManager(ClientEnvironment* env);
+	ParticleManager(ClientEnvironment* env, Client *);
 	DISABLE_CLASS_COPY(ParticleManager)
 	~ParticleManager();
 
@@ -240,6 +288,9 @@ public:
 		return m_next_particle_spawner_id++;
 	}
 
+  u64 add_volume_particle_spawner (VolumeParticleSpawner *);
+  bool delete_volume_particle_spawner (u64, bool);
+
 protected:
 	static bool getNodeParticleParams(Client *client, const MapNode &n,
 		ParticleParameters &p, video::ITexture **texture, v2f &texpos,
@@ -256,6 +307,16 @@ private:
 	void stepParticles(float dtime);
 	void stepSpawners(float dtime);
 	void stepBuffers(float dtime);
+
+  ParticleBuffer *find_particle_buffer (video::SMaterial &);
+  ParticleBuffer *particle_buffer_from_id (u64);
+
+  void add_volume_particle (VolumeParticleSpawner *, ClientMap &,
+			    struct VolumeParticleData *, buffer_slot_list *);
+  void initialize_volume_spawner (VolumeParticleSpawner *);
+  void step_volume_spawners (float);
+  void delete_particle_buffer (u64);
+  bool delete_volume_particle_spawner_1 (u64, bool);
 
 	void clearAll();
 
@@ -274,4 +335,11 @@ private:
 
 	std::mutex m_particle_list_lock;
 	std::mutex m_spawner_list_lock;
+
+  /* Volume particle spawner data.  */
+  double time_elapsed = 0.0;
+  u64 last_volume_spawner_id = 0;
+  std::unordered_map<u64, VolumeParticleSpawner *> volume_spawners;
+
+  Client *client;
 };

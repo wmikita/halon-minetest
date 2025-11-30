@@ -54,6 +54,19 @@ struct AmbientLightCfg
   int range_squeeze;
 };
 
+extern "C"
+{
+  struct Heightmap
+  {
+    /* Number of references to this heightmap object.  */
+    int refcount;
+    
+    /* Y level of first opaque block recorded within loaded blocks in
+       this heightmap's purview.  */
+    s16 first_opaque[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
+  };
+}
+
 /*
 	ClientMap
 
@@ -148,6 +161,12 @@ public:
 
 	void onSettingChanged(std::string_view name, bool all);
 
+	virtual void post_update_node (MapBlock *, v3s16, MapNode, MapNode) override;
+	virtual void post_insert_block (MapBlock *) override;
+	virtual void post_condemn_block (MapBlock *) override;
+
+	s16 index_height_map (s16, s16);
+
 protected:
 	// use drop() instead
 	virtual ~ClientMap();
@@ -209,4 +228,6 @@ private:
 	bool m_enable_raytraced_culling;
 
 	AmbientLightCfg m_ambient_light = {0, 0,};
+
+	std::unordered_map<v2s16, Heightmap *> m_heightmaps;
 };

@@ -121,19 +121,21 @@ void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_
 	// Basic debug text also shows info that might give a gameplay advantage
 	if (m_flags.show_basic_debug) {
 		v3f player_position = player->getPosition();
+		ClientMap &map = client->getEnv().getClientMap();
 
 		std::ostringstream os(std::ios_base::binary);
 		os << std::setprecision(1) << std::fixed
 			<< "pos: (" << (player_position.X / BS)
 			<< ", " << (player_position.Y / BS)
 			<< ", " << (player_position.Z / BS)
+			<< " H: " << map.index_height_map (std::floorf (player_position.X / BS + 0.5f),
+							   std::floorf (player_position.Z / BS + 0.5f))
 			<< ") | yaw: " << (wrapDegrees_0_360(cam.camera_yaw)) << "° "
 			<< yawToDirectionString(cam.camera_yaw)
 			<< " | pitch: " << (-wrapDegrees_180(cam.camera_pitch)) << "°"
 			<< " | seed: " << ((u64)client->getMapSeed());
 
 		if (pointed_old.type == POINTEDTHING_NODE) {
-			ClientMap &map = client->getEnv().getClientMap();
 			const NodeDefManager *nodedef = client->getNodeDefManager();
 			MapNode n = map.getNode(pointed_old.node_undersurface);
 

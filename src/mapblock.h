@@ -560,6 +560,11 @@ public:
 
 private:
 	NodeTimerList m_node_timers;
+
+public:
+	/* If client-side, whether a heightmap reference is held by
+	   this block.  */
+	bool holds_heightmap_reference_p = false;
 };
 
 typedef std::vector<MapBlock*> MapBlockVect;

@@ -13,6 +13,8 @@ private:
 	static int l_add_particle(lua_State *L);
 	static int l_add_particlespawner(lua_State *L);
 	static int l_delete_particlespawner(lua_State *L);
+	static int l_add_volume_particle_spawner (lua_State *);
+	static int l_delete_volume_particle_spawner (lua_State *);
 
 public:
 	static void Initialize(lua_State *L, int top);

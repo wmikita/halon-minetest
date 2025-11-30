@@ -52,6 +52,14 @@ MapBlock *MapSector::getBlockBuffered(s16 y)
 	return block;
 }
 
+MapBlock *
+MapSector::getBlockUncached (s16 y)
+{
+  // If block doesn't exist, return NULL
+  auto it = m_blocks.find (y);
+  return it != m_blocks.end () ? it->second.get () : nullptr;
+}
+
 MapBlock *MapSector::getBlockNoCreateNoEx(s16 y)
 {
 	return getBlockBuffered(y);

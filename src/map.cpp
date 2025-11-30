@@ -212,6 +212,8 @@ void Map::addNodeAndUpdate(v3s16 p, MapNode n,
 		action.setSetNode(p, rollback_oldnode, rollback_newnode);
 		m_gamedef->rollback()->reportAction(action);
 	}
+
+	post_update_node (block, relpos, oldnode, n);
 }
 
 void Map::removeNodeAndUpdate(v3s16 p,
@@ -328,6 +330,7 @@ void Map::timerUpdate(float dtime, float unload_timeout, s32 max_loaded_blocks,
 					}
 
 					// Delete from memory
+					post_condemn_block (block);
 					sector->deleteBlock(block);
 
 					if (unloaded_blocks)
@@ -381,6 +384,7 @@ void Map::timerUpdate(float dtime, float unload_timeout, s32 max_loaded_blocks,
 			}
 
 			// Delete from memory
+			post_condemn_block (block);
 			b.sect->deleteBlock(block);
 
 			if (unloaded_blocks)

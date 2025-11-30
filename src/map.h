@@ -277,6 +277,10 @@ public:
 	}
 	bool isBlockOccluded(v3s16 pos_relative, v3s16 cam_pos_nodes, bool simple_check = false);
 
+	virtual void post_update_node (MapBlock *, v3s16, MapNode, MapNode) {};
+	virtual void post_insert_block (MapBlock *) {};
+	virtual void post_condemn_block (MapBlock *) {};
+
 protected:
 	IGameDef *m_gamedef;
 

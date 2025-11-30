@@ -328,6 +328,7 @@ void Client::handleCommand_BlockData(NetworkPacket* pkt)
 		block->deSerialize(istr, m_server_ser_ver, false);
 		block->deSerializeNetworkSpecific(istr);
 	}
+	m_env.getMap ().post_insert_block (block);
 
 	if (m_localdb) {
 		ServerMap::saveBlock(block, m_localdb.get());

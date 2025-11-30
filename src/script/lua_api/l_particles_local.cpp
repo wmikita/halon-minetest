@@ -201,9 +201,175 @@ int ModApiParticlesLocal::l_delete_particlespawner(lua_State *L)
 	return 0;
 }
 
+/* core.add_volume_particle_spawner (TABLE)
+
+   Create a volume particle spawner and return its identifier.  A
+   volume particle spawner is a system that arranges for a constant
+   number of particles to fill each column in a rectangular volume
+   around the camera, with apparently continuous motion achieved by
+   deriving particle trajectories in a deterministic manner from game
+   time and node position.
+
+   TABLE describes the parameters of the volume particle spawner, and
+   must be of the form:
+
+   {
+        -- List of textures from which particles will be selected.
+        textures = { "foo.png", ... },
+
+	-- Tint applied to each pixel in selected textures.
+	color = "#ffffff",
+
+	-- Velocity in nodes per second by which each particle
+	-- will appear to move.
+	velocity_min = vector.new (0.0, 0.0, 0.0),
+	velocity_max = vector.new (0.0, 0.0, 0.0),
+
+	-- The duration of a single particle's animation cycle, in
+	-- seconds.  Each particle generated receives its position by
+	-- taking the remainder of a division of the sum of the age of
+	-- the game session with a random per-particle offset by this
+	-- period quantity, and applying the velocity multiplied by
+	-- the same to a random position within the base of the
+	-- volume, wrapping the result's components around the
+	-- boundaries of the column or volume as appropriate.  As
+	-- such, the duration should be defined to a multiple of a
+	-- value whose product with velocity yields a multiple of
+	-- range_period, so as to prevent particles from appearing
+	-- abruptly to teleport while in motion.
+	period = 10.0,
+
+	-- The size of each particle's billboard on screen.
+	size = 1.0,
+
+	-- Scaling factors applied to each particle.
+	scale = { x = 1.0, y = 1.0, },
+
+	-- The number of particles to generate in each column of the
+	-- volume.
+        particles_per_column = 24,
+
+	-- The width and length in nodes of the area around the camera
+        -- where columns of particles will be generated.
+	range_horizontal = 7,
+
+	-- The height of each column around the camera where columns
+        -- of particles will generate.
+	range_vertical = 7,
+
+	-- Whether particles should only generate above the ground
+        -- level as known to the client.
+	above_heightmap = false,
+   }  */
+
+int
+ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
+{
+  Client *client = getClient (L);
+  ParticleManager *manager = client->getParticleManager ();
+  VolumeParticleSpawner spawner, *tem;
+
+  luaL_checktype (L, 1, LUA_TTABLE);
+
+  lua_getfield (L, -1, "textures");
+  luaL_checktype (L, -1, LUA_TTABLE);
+  lua_pushnil (L);
+  while (lua_next (L, -2))
+    {
+      ServerParticleTexture texture;
+      texture.string = luaL_checkstring (L, -1);
+      spawner.m_texpool.emplace_back (texture, client->tsrc ());
+      lua_pop (L, 1);
+    }
+  lua_pop (L, 1);
+
+  if (spawner.m_texpool.empty ())
+    {
+      lua_pushstring (L, "texture pool list is empty");
+      lua_error (L);
+    }
+
+  lua_getfield (L, -1, "color");
+  if (!lua_isnil (L, -1))
+    read_color (L, -1, &spawner.color);
+  lua_pop (L, 1);
+
+  lua_getfield (L, -1, "velocity_min");
+  if (!lua_isnil (L, -1))
+    spawner.velocity_min = check_v3f (L, -1);
+  else
+    spawner.velocity_min = v3f (0.0f, 0.0f, 0.0f);
+  lua_pop (L, 1);
+
+  lua_getfield (L, -1, "velocity_max");
+  if (!lua_isnil (L, -1))
+    spawner.velocity_max = check_v3f (L, -1);
+  else
+    spawner.velocity_max = v3f (0.0f, 0.0f, 0.0f);
+  lua_pop (L, 1);
+
+  lua_getfield (L, -1, "period");
+  if (!lua_isnil (L, -1))
+    spawner.period = luaL_checknumber (L, -1);
+  else
+    spawner.period = 10.0;
+  lua_pop (L, 1);
+
+  lua_getfield (L, -1, "size");
+  if (!lua_isnil (L, -1))
+    spawner.size = luaL_checknumber (L, -1);
+  else
+    spawner.size = 1.0;
+  lua_pop (L, 1);
+
+  lua_getfield (L, -1, "scale");
+  if (!lua_isnil (L, -1))
+    {
+      v2f scale = check_v2f (L, -1);
+      spawner.sx = scale.X;
+      spawner.sy = scale.Y;
+    }
+  else
+    spawner.sx = spawner.sy = 1.0;
+  lua_pop (L, 1);
+
+#define CHECK_INT_FIELD(name, def)		\
+  lua_getfield (L, -1, #name);			\
+  if (!lua_isnil (L, -1))			\
+    spawner.name = luaL_checknumber (L, -1);	\
+  else						\
+    spawner.name = def;				\
+  lua_pop (L, 1);
+
+  CHECK_INT_FIELD (particles_per_column, 24);
+  CHECK_INT_FIELD (range_horizontal, 7);
+  CHECK_INT_FIELD (range_vertical, 7);
+#undef CHECK_INT_FIELD
+
+  lua_getfield (L, -1, "above_heightmap");
+  spawner.above_heightmap_p = lua_toboolean (L, -1);
+  lua_pop (L, 2);
+
+  /* Add the spawner.  */
+  tem = new VolumeParticleSpawner (std::move (spawner));
+  lua_pushnumber (L, manager->add_volume_particle_spawner (tem));
+  return 1;
+}
+
+int
+ModApiParticlesLocal::l_delete_volume_particle_spawner (lua_State *L)
+{
+  u64 i = luaL_checknumber (L, -1);
+  ParticleManager *mgr = getClient (L)->getParticleManager ();
+  lua_pushboolean (L, mgr->delete_volume_particle_spawner (i, true));
+  return 1;
+}
+
 void ModApiParticlesLocal::Initialize(lua_State *L, int top)
 {
 	API_FCT(add_particle);
 	API_FCT(add_particlespawner);
 	API_FCT(delete_particlespawner);
+	API_FCT (add_volume_particle_spawner);
+	API_FCT (delete_volume_particle_spawner);
 }

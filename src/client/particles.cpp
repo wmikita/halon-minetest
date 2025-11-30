@@ -12,6 +12,8 @@
 #include "client/renderingengine.h"
 #include "client/texturesource.h"
 #include "util/numeric.h"
+#include "noise.h" /* For PcgRandom. */
+#include "mapgen/mapgen.h"
 #include "light.h"
 #include "localplayer.h"
 #include "clientmap.h"
@@ -567,11 +569,14 @@ void ParticleSpawner::step(float dtime, ClientEnvironment *env)
 	ParticleBuffer
 */
 
+static u64 particle_buffer_id;
+
 ParticleBuffer::ParticleBuffer(ClientEnvironment *env, const video::SMaterial &material)
 	: scene::ISceneNode(
 			env->getGameDef()->getSceneManager()->getRootSceneNode(),
 			env->getGameDef()->getSceneManager()),
-	m_mesh_buffer(make_irr<scene::SMeshBuffer>())
+	  m_mesh_buffer(make_irr<scene::SMeshBuffer>()),
+	  id (particle_buffer_id++)
 {
 	m_mesh_buffer->getMaterial() = material;
 }
@@ -616,6 +621,37 @@ void ParticleBuffer::release(u16 index)
 	for (u16 i = 0; i < 6; i++)
 		indices[6 * index + i] = 0;
 	m_free_list.push_back(index);
+}
+
+void
+ParticleBuffer::release_bulk (u16_const_iterator start, u16_const_iterator end)
+{
+  u16 *indices = m_mesh_buffer->getIndices ();
+
+#ifndef NDEBUG
+  for (; start < end; start++)
+    {
+      u16 idx = *start;
+      int i;
+
+      assert (!CONTAINS (m_free_list, idx));
+      m_free_list.push_back (idx);
+
+      for (i = 0; i < 6; i++)
+	indices[6 * idx + i] = 0;
+    }
+#else /* NDEBUG */
+  m_free_list.insert (m_free_list.end (), start, end);
+  for (; start < end; start++)
+    {
+      indices[6 * (*start) + 0] = 0;
+      indices[6 * (*start) + 1] = 0;
+      indices[6 * (*start) + 2] = 0;
+      indices[6 * (*start) + 3] = 0;
+      indices[6 * (*start) + 4] = 0;
+      indices[6 * (*start) + 5] = 0;
+    }
+#endif /* !NDEBUG */
 }
 
 video::S3DVertex *ParticleBuffer::getVertices(u16 index)
@@ -680,8 +716,9 @@ void ParticleBuffer::render()
 	ParticleManager
 */
 
-ParticleManager::ParticleManager(ClientEnvironment *env) :
-	m_env(env)
+ParticleManager::ParticleManager(ClientEnvironment *env, Client *client) :
+	m_env(env),
+	client (client)
 {}
 
 ParticleManager::~ParticleManager()
@@ -693,6 +730,7 @@ void ParticleManager::step(float dtime)
 {
 	stepParticles(dtime);
 	stepSpawners(dtime);
+	step_volume_spawners (dtime);
 	stepBuffers(dtime);
 }
 
@@ -761,6 +799,8 @@ void ParticleManager::stepBuffers(float dtime)
 		auto &buf = m_particle_buffers[i];
 		buf->m_usage_timer += INTERVAL;
 		if (buf->isEmpty() && buf->m_usage_timer > 5.0f) {
+			u64 id = buf->get_id ();
+			delete_particle_buffer (id);
 			// delete and swap with last
 			buf->remove();
 			buf = std::move(m_particle_buffers.back());
@@ -790,6 +830,9 @@ void ParticleManager::clearAll()
 	for (auto &it : m_particle_buffers)
 		it->remove();
 	m_particle_buffers.clear();
+
+	for (auto &it : volume_spawners)
+	  delete_volume_particle_spawner_1 (it.first, false);
 }
 
 void ParticleManager::handleParticleEvent(ClientEvent *event, Client *client,
@@ -1038,13 +1081,10 @@ video::SMaterial ParticleManager::getMaterialForParticle(const Particle *particl
 	return material;
 }
 
-bool ParticleManager::addParticle(std::unique_ptr<Particle> toadd)
+ParticleBuffer *
+ParticleManager::find_particle_buffer (video::SMaterial &material)
 {
-	MutexAutoLock lock(m_particle_list_lock);
-
-	auto material = getMaterialForParticle(toadd.get());
-
-	ParticleBuffer *found = nullptr;
+  	ParticleBuffer *found = nullptr;
 	// simple shortcut when multiple particles of the same type get added
 	if (!m_particles.empty()) {
 		auto &last = m_particles.back();
@@ -1066,7 +1106,16 @@ bool ParticleManager::addParticle(std::unique_ptr<Particle> toadd)
 		found = tmp.get();
 		m_particle_buffers.push_back(std::move(tmp));
 	}
+	return found;
+}
 
+bool ParticleManager::addParticle(std::unique_ptr<Particle> toadd)
+{
+	MutexAutoLock lock(m_particle_list_lock);
+
+	auto material = getMaterialForParticle(toadd.get());
+
+	ParticleBuffer *found = find_particle_buffer (material);
 	if (!toadd->attachToBuffer(found)) {
 		infostream << "ParticleManager: buffer full, dropping particle" << std::endl;
 		return false;
@@ -1098,4 +1147,334 @@ void ParticleManager::deleteParticleSpawner(u64 id)
 		m_dying_particle_spawners.push_back(std::move(it->second));
 		m_particle_spawners.erase(it);
 	}
+}
+
+
+
+/* Volume particle spawners.
+
+   Volume particle spawners arrange to display a concentration of a
+   constant number of moving particles in a volume around the camera,
+   with their appearance in each column possibly controlled by a
+   heightmap.  */
+
+static u32
+jenkins_hash (u32 a)
+{
+  a = (a+0x7ed55d16u) + (a<<12);
+  a = (a^0xc761c23cu) ^ (a>>19);
+  a = (a+0x165667b1u) + (a<<5);
+  a = (a+0xd3a2646cu) ^ (a<<9);
+  a = (a+0xfd7046c5u) + (a<<3);
+  a = (a^0xb55a4f09u) ^ (a>>16);
+  return a;
+}
+
+ParticleBuffer *
+ParticleManager::particle_buffer_from_id (u64 id)
+{
+  for (auto &buffer : m_particle_buffers)
+    {
+      if (buffer->get_id () == id)
+	return buffer.get ();
+    }
+
+  return NULL;
+}
+
+struct VolumeParticleData
+{
+  video::SColor default_color;
+  u32 iseed;
+  v3f offset;
+  v3s16 light_pos;
+};
+
+void
+ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap &map,
+				      struct VolumeParticleData *data,
+				      buffer_slot_list *next_slots)
+{
+  /* Select a texture and material.  */
+  int idx = data->iseed % spawner->m_materials.size ();
+  video::SMaterial material = spawner->m_materials[idx];
+  int slot;
+  ParticleBuffer *buffer = NULL;
+
+  /* Search for an existing particle slot.  */
+  for (auto &i : spawner->m_slots)
+    {
+      ParticleBuffer *tem = particle_buffer_from_id (i.first);
+      assert (tem);
+
+      if (tem->getMaterial (0) == material)
+	{
+	  buffer = tem;
+	  slot = i.second.back ();
+	  assert (slot < ParticleBuffer::MAX_PARTICLES_PER_BUFFER);
+	  i.second.pop_back ();
+	  if (i.second.empty ())
+	    spawner->m_slots.erase (i.first);
+	  break;
+	}
+    }
+
+  /* Get a new particle buffer otherwise.  */
+  if (!buffer)
+    {
+      std::optional<u16> alloc_slot;
+
+      buffer = find_particle_buffer (material);
+      alloc_slot = buffer->allocate ();
+      if (!alloc_slot.has_value ())
+	{
+	  infostream
+	    << "ParticleManager: buffer full, dropping volume particle"
+	    << std::endl;
+	  return;
+	}
+      slot = alloc_slot.value ();
+      assert (slot < ParticleBuffer::MAX_PARTICLES_PER_BUFFER);
+    }
+
+  (*next_slots)[buffer->get_id ()].push_back (slot);
+
+  {
+    video::S3DVertex *vertices = buffer->getVertices (slot);
+    f32 tx0, tx1, ty0, ty1, hx = spawner->size * 0.5f * spawner->sx;
+    f32 hy = spawner->size * 0.5f * spawner->sy;
+    float yaw = m_env->getLocalPlayer ()->getYaw ();
+    int i;
+    bool pos_ok;
+    video::SColor color = data->default_color;
+
+    if (!spawner->above_heightmap_p)
+      {
+	MapNode n = map.getNode (data->light_pos, &pos_ok);
+	u8 light = (!pos_ok ? 0
+		    : n.getLightBlend (m_env->getDayNightRatio (),
+				       m_env->getGameDef ()->ndef ()->getLightingFlags (n)));
+	u8 m_light = decode_light (light);
+	color.set (255, m_light * spawner->color.getRed () / 255,
+		   m_light * spawner->color.getGreen () / 255,
+		   m_light * spawner->color.getBlue () / 255);
+      }
+
+    tx0 = spawner->texpos.X;
+    tx1 = spawner->texpos.X + spawner->texsize.X;
+    ty0 = spawner->texpos.Y;
+    ty1 = spawner->texpos.Y + spawner->texsize.Y;
+
+    vertices[0]
+      = video::S3DVertex (-hx, -hy, 0, 0, 0, 0, color, tx0, ty1);
+    vertices[1]
+      = video::S3DVertex (hx, -hy, 0, 0, 0, 0, color, tx1, ty1);
+    vertices[2]
+      = video::S3DVertex (hx, hy, 0, 0, 0, 0, color, tx1, ty0);
+    vertices[3]
+      = video::S3DVertex (-hx, hy, 0, 0, 0, 0, color, tx0, ty0);
+
+    for (i = 0; i < 4; ++i)
+      {
+	vertices[i].Pos.rotateXZBy (yaw);
+	vertices[i].Pos += data->offset;
+      }
+  }
+}
+
+/* TODO: generate a series of 2d billboard textures with randomly
+   distributed particles and simply bind those to a single quad per
+   column in `step_volume_spawners'.  */
+
+void
+ParticleManager::initialize_volume_spawner (VolumeParticleSpawner *spawner)
+{
+  size_t i;
+
+  spawner->m_materials.reserve (spawner->m_texpool.size ());
+  for (i = 0; i < spawner->m_texpool.size (); ++i)
+    {
+      ClientParticleTexRef texture = ClientParticleTexRef (spawner->m_texpool[i]);
+      ParticleParameters parms;
+      Particle particle (parms, texture, v2f (), v2f (), video::SColor ());
+      spawner->m_materials.push_back (getMaterialForParticle (&particle));
+    }
+}
+
+static float
+lpr (float x, float y)
+{
+  float z = std::fmodf (x, y);
+  return (z < 0 ? z + y : z);
+}
+
+static v3f
+random_velocity (u32 iseed1, VolumeParticleSpawner *tem)
+{
+  v3f min = tem->velocity_min;
+  v3f max = tem->velocity_max;
+  float dx = (iseed1 & 0x3ff) * 1.0f / 1023.0f;
+  float dy = ((iseed1 >> 10) & 0x3ff) * 1.0f / 1023.0f;
+  float dz = ((iseed1 >> 20) & 0x3ff) * 1.0f / 1023.0f;
+  return v3f ((max.X - min.X) * dx + min.X,
+	      (max.Y - min.Y) * dy + min.Y,
+	      (max.Z - min.Z) * dz + min.Z);
+}
+
+void
+ParticleManager::step_volume_spawners (float dtime)
+{
+  MutexAutoLock lock (m_particle_list_lock);
+  ScopeProfiler sp (g_profiler, "ParticleManager: step_volume_spawners",
+		    SPT_AVG, PRECISION_MICRO);
+  double t = this->time_elapsed += dtime;
+  float r = 1.0f / 255.0f;
+  float r1 = 1.0f / 65535.0f;
+  u8 daylight = decode_light (blend_light (m_env->getDayNightRatio (),
+					   LIGHT_SUN, 0));
+
+  for (auto &i : volume_spawners)
+    {
+      VolumeParticleSpawner *tem = i.second;
+      std::unordered_map<u64, std::vector<u16>> used_slots;
+      Camera *camera = client->getCamera ();
+      v3f cam_pos = camera->getPosition ();
+      v3s16 pos = floatToInt (cam_pos, BS);
+      int ymin = pos.Y - tem->range_vertical;
+      int ymax = pos.Y + tem->range_vertical;
+      int x, z;
+      ClientMap &map = m_env->getClientMap ();
+      video::SColor default_color (255, daylight * tem->color.getRed () / 255,
+				   daylight * tem->color.getGreen () / 255,
+				   daylight * tem->color.getBlue () / 255);
+
+      for (auto &i : tem->m_slots)
+	{
+	  size_t size = i.second.size ();
+
+	  /* used_slots will be copied into m_slots after particles
+	     are generated, so maintain the invariant that m_slots
+	     mustn't contain empty vectors.  */
+	  if (size)
+	    used_slots[i.first].reserve (size);
+	}
+
+      if (tem->m_materials.empty ())
+	initialize_volume_spawner (tem);
+
+      for (z = pos.Z - tem->range_horizontal;
+	   z <= pos.Z + tem->range_horizontal; ++z)
+	{
+	  for (x = pos.X - tem->range_horizontal;
+	       x <= pos.X + tem->range_horizontal; ++x)
+	    {
+	      v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
+	      PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, ymin, x), 0xdc321c6bu) + tem->id);
+	      int i, count = pr.range (tem->particles_per_column + 1);
+	      int height = tem->above_heightmap_p ? map.index_height_map (x, z) : 0;
+	      int hmmin = (tem->above_heightmap_p ? std::max (height, ymin) : ymin);
+	      int hmmax = (tem->above_heightmap_p ? std::max (height, ymax) : ymax);
+	      float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
+					+ (x - pos.X) * (x - pos.X))
+			    / (float) tem->range_horizontal);
+	      int alpha = (1 - dist * dist) * 255;
+
+	      if (alpha < 0 || hmmin > ymax)
+		continue;
+
+	      for (i = 0; i < count; ++i)
+		{
+		  u32 iseed = pr.next ();
+		  float dx = (iseed / 0x001 & 255) * r;
+		  float dz = (iseed / 0x100 & 255) * r;
+		  float offset = (iseed / 0x10000) * r1;
+		  u32 iseed_1 = jenkins_hash (iseed);
+		  float delta = lpr (offset * tem->period + t, tem->period);
+		  v3f velocity = random_velocity (iseed_1, tem);
+		  v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
+				    ymin + lpr (velocity.Y * delta, ymax - ymin),
+				    z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
+		  if (particle_pos.Y >= hmmin && particle_pos.Y <= hmmax)
+		    {
+		      v3s16 light_pos (floor (particle_pos.X + 0.5),
+				       floor (particle_pos.Y + 0.5),
+				       floor (particle_pos.Z + 0.5));
+		      VolumeParticleData data;
+
+		      data.default_color = default_color;
+		      data.default_color.setAlpha (alpha);
+		      data.iseed = iseed_1;
+		      data.offset = particle_pos * BS - cam_offset;
+		      data.light_pos = light_pos;
+		      add_volume_particle (tem, map, &data, &used_slots);
+		    }
+		}
+	    }
+	}
+
+      for (auto &i : used_slots)
+	{
+	  std::vector<u16> *slots = &tem->m_slots[i.first];
+	  ParticleBuffer *buffer = particle_buffer_from_id (i.first);
+	  assert (buffer != NULL);
+
+	  buffer->release_bulk (slots->begin (), slots->end ());
+	  if (!i.second.empty ())
+	    *slots = std::move (i.second);
+	  else
+	    tem->m_slots.erase (i.first);
+	}
+    }
+}
+
+void
+ParticleManager::delete_particle_buffer (u64 id)
+{
+  for (auto &i : volume_spawners)
+    i.second->m_slots.erase (id);
+}
+
+u64
+ParticleManager::add_volume_particle_spawner (VolumeParticleSpawner *spawner)
+{
+  MutexAutoLock lock (m_particle_list_lock);
+  u64 id = last_volume_spawner_id++;
+  volume_spawners[id] = spawner;
+  spawner->id = id;
+  return id;
+}
+
+bool
+ParticleManager::delete_volume_particle_spawner_1 (u64 id, bool release_slots)
+{
+  auto it = volume_spawners.find (id);
+
+  if (it != volume_spawners.end (id))
+    {
+      VolumeParticleSpawner *spawner = volume_spawners[id];
+
+      if (release_slots)
+	{
+	  for (auto &i : spawner->m_slots)
+	    {
+	      ParticleBuffer *buffer = particle_buffer_from_id (i.first);
+	      assert (buffer != NULL);
+	      buffer->release_bulk (i.second.begin (), i.second.end ());
+	    }
+
+	  volume_spawners.erase (id);
+	}
+
+      delete spawner;
+      return true;
+    }
+
+  return false;
+}
+
+bool
+ParticleManager::delete_volume_particle_spawner (u64 id, bool release_slots)
+{
+  MutexAutoLock lock (m_particle_list_lock);
+  return delete_volume_particle_spawner_1 (id, release_slots);
 }
