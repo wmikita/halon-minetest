@@ -1330,8 +1330,8 @@ ParticleManager::step_volume_spawners (float dtime)
   double t = this->time_elapsed += dtime;
   float r = 1.0f / 255.0f;
   float r1 = 1.0f / 65535.0f;
-  u8 daylight = decode_light (blend_light (m_env->getDayNightRatio (),
-					   LIGHT_SUN, 0));
+  u32 dnr = m_env->getDayNightRatio ();
+  u8 daylight = decode_light (blend_light (dnr, LIGHT_SUN, 0));
 
   for (auto &i : volume_spawners)
     {
@@ -1344,9 +1344,10 @@ ParticleManager::step_volume_spawners (float dtime)
       int ymax = pos.Y + tem->range_vertical;
       int x, z;
       ClientMap &map = m_env->getClientMap ();
-      video::SColor default_color (255, daylight * tem->color.getRed () / 255,
-				   daylight * tem->color.getGreen () / 255,
-				   daylight * tem->color.getBlue () / 255);
+      int red = tem->color.getRed ();
+      int green = tem->color.getGreen ();
+      int blue = tem->color.getBlue ();
+      VolumeParticleData data;
 
       for (auto &i : tem->m_slots)
 	{
@@ -1371,16 +1372,35 @@ ParticleManager::step_volume_spawners (float dtime)
 	      v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
 	      PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, 0, x), 0xdc321c6bu) + tem->id);
 	      int i, count = pr.range (tem->particles_per_column + 1);
-	      int height = tem->above_heightmap_p ? map.index_height_map (x, z) : 0;
+	      int height = tem->above_heightmap_p ? map.index_height_map (x, z) + 1 : 0;
 	      int hmmin = (tem->above_heightmap_p ? std::max (height, ymin) : ymin);
 	      int hmmax = (tem->above_heightmap_p ? std::max (height, ymax) : ymax);
 	      float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
 					+ (x - pos.X) * (x - pos.X))
 			    / (float) tem->range_horizontal);
 	      int alpha = (1 - dist * dist) * 255;
+	      u8 camera_light = daylight;
+	      const NodeDefManager *ndef = m_env->getGameDef ()->ndef ();
 
 	      if (alpha < 0 || hmmin > ymax)
 		continue;
+
+	      if (tem->above_heightmap_p)
+		{
+		  v3s16 pos = v3s16 (x, std::max ((int) pos.Y, height), z);
+		  bool is_valid;
+		  MapNode n = map.getNode (pos, &is_valid);
+
+		  if (is_valid)
+		    {
+		      u8 light = n.getLightBlend (dnr, ndef->getLightingFlags (n));
+		      camera_light = decode_light (light);
+		    }
+
+		  data.default_color.set (255, camera_light * red / 255,
+					  camera_light * green / 255,
+					  camera_light * blue / 255);
+		}
 
 	      for (i = 0; i < count; ++i)
 		{
@@ -1394,14 +1414,13 @@ ParticleManager::step_volume_spawners (float dtime)
 		  v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
 				    ymin + lpr (velocity.Y * delta - ymin, ymax - ymin),
 				    z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
-		  if (particle_pos.Y >= hmmin && particle_pos.Y <= hmmax)
+		  if (particle_pos.Y >= hmmin - 0.5f
+		      && particle_pos.Y <= hmmax + 0.5f)
 		    {
 		      v3s16 light_pos (floor (particle_pos.X + 0.5),
 				       floor (particle_pos.Y + 0.5),
 				       floor (particle_pos.Z + 0.5));
-		      VolumeParticleData data;
 
-		      data.default_color = default_color;
 		      data.default_color.setAlpha (alpha);
 		      data.iseed = iseed_1;
 		      data.offset = particle_pos * BS - cam_offset;
