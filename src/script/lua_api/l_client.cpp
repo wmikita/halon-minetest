@@ -8,6 +8,7 @@
 #include "client/client.h"
 #include "client/sound.h"
 #include "client/clientenvironment.h"
+#include "client/clientmap.h"
 #include "common/c_content.h"
 #include "common/c_converter.h"
 #include "cpp_api/s_base.h"
@@ -314,6 +315,52 @@ int ModApiClient::l_get_csm_restrictions(lua_State *L)
 	return 1;
 }
 
+int
+ModApiClient::l_get_position_height (lua_State *L)
+{
+  s16 x = readParam<s16> (L, 1);
+  s16 z = readParam<s16> (L, 2);
+  ClientEnvironment *csm
+    = static_cast<ClientEnvironment *> (getEnv (L));
+  lua_pushnumber (L, csm->getClientMap ().index_height_map (x, z));
+  return 1;
+}
+
+int
+ModApiClient::l_scan_position_height (lua_State *L)
+{
+  s16 x = readParam<s16> (L, 1);
+  s16 y = readParam<s16> (L, 2);
+  s16 z = readParam<s16> (L, 3);
+  s16 r = readParam<s16> (L, 4);
+  int x1, z1;
+  v2s16 pos;
+  int nearest = S16_MIN - 1;
+  ClientEnvironment *csm = static_cast<ClientEnvironment *> (getEnv (L));
+  ClientMap &map = csm->getClientMap ();
+
+  for (z1 = std::max (S16_MIN, z - r);
+       z1 <= std::min (S16_MAX, z + r); ++z1)
+    {
+      for (x1 = std::max (S16_MIN, x - r);
+	   x1 <= std::min (S16_MAX, x + r); ++x1)
+	{
+	  s16 height = map.index_height_map (x1, z1);
+	  if (height > S16_MIN
+	      && std::abs (height - y) < std::abs (nearest - y))
+	    {
+	      nearest = height;
+	      pos = v2s16 (x1, z1);
+	    }
+	}
+    }
+  if (nearest < S16_MIN)
+    lua_pushnil (L);
+  else
+    push_v3s16 (L, v3s16 (pos.X, nearest, pos.Y));
+  return 1;
+}
+
 void ModApiClient::Initialize(lua_State *L, int top)
 {
 	API_FCT(get_current_modname);
@@ -334,6 +381,8 @@ void ModApiClient::Initialize(lua_State *L, int top)
 	API_FCT(get_builtin_path);
 	API_FCT(get_language);
 	API_FCT(get_csm_restrictions);
+	API_FCT (get_position_height);
+	API_FCT (scan_position_height);
 }
 
 void ModApiClient::InitializeSSCSM(lua_State *L, int top)

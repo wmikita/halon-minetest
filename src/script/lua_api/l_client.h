@@ -67,6 +67,9 @@ private:
 	// get_csm_restrictions()
 	static int l_get_csm_restrictions(lua_State *L);
 
+  static int l_get_position_height (lua_State *);
+  static int l_scan_position_height (lua_State *);
+
 public:
 	static void Initialize(lua_State *L, int top);
 	static void InitializeSSCSM(lua_State *L, int top);
