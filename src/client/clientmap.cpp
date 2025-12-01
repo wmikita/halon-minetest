@@ -1810,9 +1810,10 @@ heightmap_scan (ClientMap *map, const NodeDefManager *ndef, v2s16 pos,
 }
 
 static bool
-walkable_or_liquid (const ContentFeatures &cf)
+opaque_for_heightmap (const ContentFeatures &cf)
 {
-  return cf.walkable || cf.liquid_type != LIQUID_NONE;
+  return (cf.walkable || cf.liquid_type != LIQUID_NONE
+	  || !cf.light_propagates);
 }
 
 void
@@ -1825,7 +1826,7 @@ ClientMap::post_update_node (MapBlock *block, v3s16 relpos, MapNode old_node,
       const NodeDefManager *ndef = m_client->getNodeDefManager ();
       v2s16 heightmap_pos (block->getPos ().X, block->getPos ().Z);
       s16 curheight;
-      bool new_node = walkable_or_liquid (ndef->get (node));
+      bool new_node = opaque_for_heightmap (ndef->get (node));
       int i = relpos.Z * MAP_BLOCKSIZE + relpos.X;
 
       map = m_heightmaps[heightmap_pos];
@@ -1892,7 +1893,7 @@ ClientMap::post_insert_block (MapBlock *block)
 	  {
 	    bool dummy;
 	    MapNode node = block->getNode (v3s16 (x, y, z), &dummy);
-	    bool new_node = walkable_or_liquid (ndef->get (node));
+	    bool new_node = opaque_for_heightmap (ndef->get (node));
 
 	    if (new_node)
 	      {
