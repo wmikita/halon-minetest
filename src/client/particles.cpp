@@ -1387,9 +1387,9 @@ ParticleManager::step_volume_spawners (float dtime)
 
 	      if (tem->above_heightmap_p)
 		{
-		  v3s16 pos = v3s16 (x, std::max ((int) pos.Y, height), z);
+		  v3s16 light_pos = v3s16 (x, std::max ((int) pos.Y, height), z);
 		  bool is_valid;
-		  MapNode n = map.getNode (pos, &is_valid);
+		  MapNode n = map.getNode (light_pos, &is_valid);
 
 		  if (is_valid)
 		    {
