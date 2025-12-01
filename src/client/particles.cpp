@@ -1321,6 +1321,17 @@ random_velocity (u32 iseed1, VolumeParticleSpawner *tem)
 	      (max.Z - min.Z) * dz + min.Z);
 }
 
+static bool
+is_column_visible (struct ColumnVisibilityMap *map, int x, int z,
+		   unsigned int test)
+{
+  int dx = x - map->cx + map->range;
+  int dz = z - map->cz + map->range;
+  int max = map->range * 2 + 1;
+  return (dx > 0 && dz > 0 && dx < max && dz < max
+	  && (map->flags[dz * max + dx] & test));
+}
+
 void
 ParticleManager::step_volume_spawners (float dtime)
 {
@@ -1369,63 +1380,72 @@ ParticleManager::step_volume_spawners (float dtime)
 	  for (x = pos.X - tem->range_horizontal;
 	       x <= pos.X + tem->range_horizontal; ++x)
 	    {
-	      v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
-	      PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, 0, x), 0xdc321c6bu) + tem->id);
-	      int i, count = pr.range (tem->particles_per_column + 1);
-	      int height = tem->above_heightmap_p ? map.index_height_map (x, z) + 1 : 0;
-	      int hmmin = (tem->above_heightmap_p ? std::max (height, ymin) : ymin);
-	      int hmmax = (tem->above_heightmap_p ? std::max (height, ymax) : ymax);
-	      float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
-					+ (x - pos.X) * (x - pos.X))
-			    / (float) tem->range_horizontal);
-	      int alpha = (1 - dist * dist) * 255;
-	      u8 camera_light = daylight;
-	      const NodeDefManager *ndef = m_env->getGameDef ()->ndef ();
-
-	      if (alpha < 0 || hmmin > ymax)
-		continue;
-
-	      if (tem->above_heightmap_p)
+	      if (!tem->visibility_map
+		  || is_column_visible (tem->visibility_map, x, z,
+					tem->visibility_test))
 		{
-		  v3s16 light_pos = v3s16 (x, std::max ((int) pos.Y, height), z);
-		  bool is_valid;
-		  MapNode n = map.getNode (light_pos, &is_valid);
+		  v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
+		  PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, 0, x),
+						       0xdc321c6bu));
+		  int i, count = pr.range (tem->particles_per_column + 1);
+		  int height = (tem->above_heightmap_p
+				? map.index_height_map (x, z) + 1 : 0);
+		  int hmmin = (tem->above_heightmap_p
+			       ? std::max (height, ymin) : ymin);
+		  int hmmax = (tem->above_heightmap_p
+			       ? std::max (height, ymax) : ymax);
+		  float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
+					    + (x - pos.X) * (x - pos.X))
+				/ (float) tem->range_horizontal);
+		  int alpha = (1 - dist * dist) * 255;
+		  u8 camera_light = daylight;
+		  const NodeDefManager *ndef = m_env->getGameDef ()->ndef ();
 
-		  if (is_valid)
+		  if (alpha < 0 || hmmin > ymax)
+		    continue;
+
+		  if (tem->above_heightmap_p)
 		    {
-		      u8 light = n.getLightBlend (dnr, ndef->getLightingFlags (n));
-		      camera_light = decode_light (light);
+		      v3s16 light_pos = v3s16 (x, std::max ((int) pos.Y, height), z);
+		      bool is_valid;
+		      MapNode n = map.getNode (light_pos, &is_valid);
+
+		      if (is_valid)
+			{
+			  u8 light = n.getLightBlend (dnr, ndef->getLightingFlags (n));
+			  camera_light = decode_light (light);
+			}
+
+		      data.default_color.set (255, camera_light * red / 255,
+					      camera_light * green / 255,
+					      camera_light * blue / 255);
 		    }
 
-		  data.default_color.set (255, camera_light * red / 255,
-					  camera_light * green / 255,
-					  camera_light * blue / 255);
-		}
-
-	      for (i = 0; i < count; ++i)
-		{
-		  u32 iseed = pr.next ();
-		  float dx = (iseed / 0x001 & 255) * r;
-		  float dz = (iseed / 0x100 & 255) * r;
-		  float offset = (iseed / 0x10000) * r1;
-		  u32 iseed_1 = jenkins_hash (iseed);
-		  float delta = lpr (offset * tem->period + t, tem->period);
-		  v3f velocity = random_velocity (iseed_1, tem);
-		  v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
-				    ymin + lpr (velocity.Y * delta - ymin, ymax - ymin),
-				    z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
-		  if (particle_pos.Y >= hmmin - 0.5f
-		      && particle_pos.Y <= hmmax + 0.5f)
+		  for (i = 0; i < count; ++i)
 		    {
-		      v3s16 light_pos (floor (particle_pos.X + 0.5),
-				       floor (particle_pos.Y + 0.5),
-				       floor (particle_pos.Z + 0.5));
+		      u32 iseed = pr.next ();
+		      float dx = (iseed / 0x001 & 255) * r;
+		      float dz = (iseed / 0x100 & 255) * r;
+		      float offset = (iseed / 0x10000) * r1;
+		      u32 iseed_1 = jenkins_hash (iseed);
+		      float delta = lpr (offset * tem->period + t, tem->period);
+		      v3f velocity = random_velocity (iseed_1, tem);
+		      v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
+					ymin + lpr (velocity.Y * delta - ymin, ymax - ymin),
+					z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
+		      if (particle_pos.Y >= hmmin - 0.5f
+			  && particle_pos.Y <= hmmax + 0.5f)
+			{
+			  v3s16 light_pos (floor (particle_pos.X + 0.5),
+					   floor (particle_pos.Y + 0.5),
+					   floor (particle_pos.Z + 0.5));
 
-		      data.default_color.setAlpha (alpha);
-		      data.iseed = iseed_1;
-		      data.offset = particle_pos * BS - cam_offset;
-		      data.light_pos = light_pos;
-		      add_volume_particle (tem, map, &data, &used_slots);
+			  data.default_color.setAlpha (alpha);
+			  data.iseed = iseed_1;
+			  data.offset = particle_pos * BS - cam_offset;
+			  data.light_pos = light_pos;
+			  add_volume_particle (tem, map, &data, &used_slots);
+			}
 		    }
 		}
 	    }
@@ -1470,7 +1490,7 @@ ParticleManager::delete_volume_particle_spawner_1 (u64 id, bool release_slots)
 
   if (it != volume_spawners.end (id))
     {
-      VolumeParticleSpawner *spawner = volume_spawners[id];
+      VolumeParticleSpawner *spawner = it->second;
 
       if (release_slots)
 	{
@@ -1484,6 +1504,7 @@ ParticleManager::delete_volume_particle_spawner_1 (u64 id, bool release_slots)
 	  volume_spawners.erase (id);
 	}
 
+      free (spawner->visibility_map);
       delete spawner;
       return true;
     }
@@ -1496,4 +1517,23 @@ ParticleManager::delete_volume_particle_spawner (u64 id, bool release_slots)
 {
   MutexAutoLock lock (m_particle_list_lock);
   return delete_volume_particle_spawner_1 (id, release_slots);
+}
+
+bool
+ParticleManager::set_column_visibility_map (u64 id, struct ColumnVisibilityMap *map,
+					    unsigned int test)
+{
+  MutexAutoLock lock (m_particle_list_lock);
+  auto it = volume_spawners.find (id);
+
+  if (it != volume_spawners.end (id))
+    {
+      free (it->second->visibility_map);
+      it->second->visibility_map = map;
+      it->second->visibility_test = test;
+
+      return true;
+    }
+
+  return false;
 }

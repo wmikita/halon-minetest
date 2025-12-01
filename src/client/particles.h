@@ -219,6 +219,16 @@ typedef short heightmap_block[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
 class VolumeParticleSpawner;
 typedef std::unordered_map<u64, std::vector<u16>> buffer_slot_list;
 
+extern "C"
+{
+  struct ColumnVisibilityMap
+  {
+    unsigned int *flags;
+    int range;
+    s16 cx, cz;
+  };
+}
+
 class VolumeParticleSpawner
 {
 public:
@@ -231,6 +241,9 @@ public:
   buffer_slot_list m_slots;
 
   u64 id;
+
+  struct ColumnVisibilityMap *visibility_map;
+  unsigned int visibility_test;
 
   video::SColor color = video::SColor (255, 255, 255, 255);
   v2f texpos = v2f (0.0f, 0.0f);
@@ -290,6 +303,7 @@ public:
 
   u64 add_volume_particle_spawner (VolumeParticleSpawner *);
   bool delete_volume_particle_spawner (u64, bool);
+  bool set_column_visibility_map (u64, struct ColumnVisibilityMap *, unsigned int);
 
 protected:
 	static bool getNodeParticleParams(Client *client, const MapNode &n,

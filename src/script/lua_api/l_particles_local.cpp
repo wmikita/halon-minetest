@@ -271,7 +271,7 @@ ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
 
   luaL_checktype (L, 1, LUA_TTABLE);
 
-  lua_getfield (L, -1, "textures");
+  lua_getfield (L, 1, "textures");
   luaL_checktype (L, -1, LUA_TTABLE);
   lua_pushnil (L);
   while (lua_next (L, -2))
@@ -289,40 +289,40 @@ ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
       lua_error (L);
     }
 
-  lua_getfield (L, -1, "color");
+  lua_getfield (L, 1, "color");
   if (!lua_isnil (L, -1))
     read_color (L, -1, &spawner.color);
   lua_pop (L, 1);
 
-  lua_getfield (L, -1, "velocity_min");
+  lua_getfield (L, 1, "velocity_min");
   if (!lua_isnil (L, -1))
     spawner.velocity_min = check_v3f (L, -1);
   else
     spawner.velocity_min = v3f (0.0f, 0.0f, 0.0f);
   lua_pop (L, 1);
 
-  lua_getfield (L, -1, "velocity_max");
+  lua_getfield (L, 1, "velocity_max");
   if (!lua_isnil (L, -1))
     spawner.velocity_max = check_v3f (L, -1);
   else
     spawner.velocity_max = v3f (0.0f, 0.0f, 0.0f);
   lua_pop (L, 1);
 
-  lua_getfield (L, -1, "period");
+  lua_getfield (L, 1, "period");
   if (!lua_isnil (L, -1))
     spawner.period = luaL_checknumber (L, -1);
   else
     spawner.period = 10.0;
   lua_pop (L, 1);
 
-  lua_getfield (L, -1, "size");
+  lua_getfield (L, 1, "size");
   if (!lua_isnil (L, -1))
     spawner.size = luaL_checknumber (L, -1);
   else
     spawner.size = 1.0;
   lua_pop (L, 1);
 
-  lua_getfield (L, -1, "scale");
+  lua_getfield (L, 1, "scale");
   if (!lua_isnil (L, -1))
     {
       v2f scale = check_v2f (L, -1);
@@ -334,7 +334,7 @@ ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
   lua_pop (L, 1);
 
 #define CHECK_INT_FIELD(name, def)		\
-  lua_getfield (L, -1, #name);			\
+  lua_getfield (L, 1, #name);			\
   if (!lua_isnil (L, -1))			\
     spawner.name = luaL_checknumber (L, -1);	\
   else						\
@@ -346,11 +346,13 @@ ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
   CHECK_INT_FIELD (range_vertical, 7);
 #undef CHECK_INT_FIELD
 
-  lua_getfield (L, -1, "above_heightmap");
+  lua_getfield (L, 1, "above_heightmap");
   spawner.above_heightmap_p = lua_toboolean (L, -1);
   lua_pop (L, 2);
 
   /* Add the spawner.  */
+  spawner.visibility_map = NULL;
+  spawner.visibility_test = 0;
   tem = new VolumeParticleSpawner (std::move (spawner));
   lua_pushnumber (L, manager->add_volume_particle_spawner (tem));
   return 1;
@@ -365,6 +367,46 @@ ModApiParticlesLocal::l_delete_volume_particle_spawner (lua_State *L)
   return 1;
 }
 
+int
+ModApiParticlesLocal::l_set_volume_particle_spawner_visibility_map (lua_State *L)
+{
+  u64 id = luaL_checknumber (L, 1);
+  s16 range = readParam<s16> (L, 2);
+  if (range > 64)
+    luaL_error (L, "Excessive range specified for particle spawner visibility map");
+  else
+    {
+      ParticleManager *mgr = getClient (L)->getParticleManager ();
+      s16 cx = readParam<s16> (L, 3);
+      s16 cz = readParam<s16> (L, 4);
+      unsigned int test = (int) luaL_checknumber (L, 6);
+      size_t stride = range * 2 + 1, len = stride * stride;
+      struct ColumnVisibilityMap *map;
+      size_t size = sizeof *map + sizeof (int) * len;
+      ptrdiff_t i;
+
+      luaL_checktype (L, 5, LUA_TTABLE);
+      if (lua_objlen (L, 5) != len)
+	luaL_error (L, "Dimensions of provided visibility map data are incorrect");
+
+      map = (struct ColumnVisibilityMap *) malloc (size);
+      map->flags = (unsigned int *) (map + 1);
+      lua_pushnil (L);
+      for (i = 0; i < (ptrdiff_t) len; ++i)
+	{
+	  lua_next (L, 5);
+	  map->flags[i] = lua_tonumber (L, -1);
+	  lua_pop (L, 1);
+	}
+      lua_pop (L, 1);
+      map->cx = cx;
+      map->cz = cz;
+      map->range = range;
+      lua_pushboolean (L, mgr->set_column_visibility_map (id, map, test));
+    }
+  return 1;
+}
+
 void ModApiParticlesLocal::Initialize(lua_State *L, int top)
 {
 	API_FCT(add_particle);
@@ -372,4 +414,5 @@ void ModApiParticlesLocal::Initialize(lua_State *L, int top)
 	API_FCT(delete_particlespawner);
 	API_FCT (add_volume_particle_spawner);
 	API_FCT (delete_volume_particle_spawner);
+	API_FCT (set_volume_particle_spawner_visibility_map);
 }
