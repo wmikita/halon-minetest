@@ -6,6 +6,7 @@
 #include "gameui.h"
 #include <irrlicht_changes/static_text.h>
 #include <gettext.h>
+#include <cmath>
 #include "gui/mainmenumanager.h"
 #include "gui/guiChatConsole.h"
 #include "gui/statusTextHelper.h"
