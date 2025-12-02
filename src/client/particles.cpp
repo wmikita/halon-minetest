@@ -1188,6 +1188,7 @@ struct VolumeParticleData
   u32 iseed;
   v3f offset;
   v3s16 light_pos;
+  float sn, cs;
 };
 
 void
@@ -1197,7 +1198,7 @@ ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap 
 {
   /* Select a texture and material.  */
   int idx = data->iseed % spawner->m_materials.size ();
-  video::SMaterial material = spawner->m_materials[idx];
+  video::SMaterial &material = spawner->m_materials[idx];
   int slot;
   ParticleBuffer *buffer = NULL;
 
@@ -1207,9 +1208,13 @@ ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap 
       ParticleBuffer *tem = particle_buffer_from_id (i.first);
       assert (tem);
 
-      if (tem->getMaterial (0) == material)
+      if ((tem->last_spawner == spawner->id
+	   && tem->last_material == idx)
+	  || tem->getMaterial (0) == material)
 	{
 	  buffer = tem;
+	  buffer->last_spawner = spawner->id;
+	  buffer->last_material = idx;
 	  slot = i.second.back ();
 	  assert (slot < ParticleBuffer::MAX_PARTICLES_PER_BUFFER);
 	  i.second.pop_back ();
@@ -1243,10 +1248,10 @@ ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap 
     video::S3DVertex *vertices = buffer->getVertices (slot);
     f32 tx0, tx1, ty0, ty1, hx = spawner->size * 0.5f * spawner->sx;
     f32 hy = spawner->size * 0.5f * spawner->sy;
-    float yaw = m_env->getLocalPlayer ()->getYaw ();
     int i;
     bool pos_ok;
     video::SColor color = data->default_color;
+    float sn = data->sn, cs = data->cs;
 
     if (!spawner->above_heightmap_p)
       {
@@ -1276,8 +1281,11 @@ ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap 
 
     for (i = 0; i < 4; ++i)
       {
-	vertices[i].Pos.rotateXZBy (yaw);
-	vertices[i].Pos += data->offset;
+	video::S3DVertex *v = &vertices[i];
+	v->Pos.set (v->Pos.X * cs - v->Pos.Z * sn,
+		    v->Pos.Y,
+		    v->Pos.X * sn + v->Pos.Z * cs);
+	v->Pos += data->offset;
       }
   }
 }
@@ -1304,8 +1312,14 @@ ParticleManager::initialize_volume_spawner (VolumeParticleSpawner *spawner)
 static float
 lpr (float x, float y)
 {
-  float z = std::fmodf (x, y);
-  return (z < 0 ? z + y : z);
+  float z = x / y - std::floorf (x / y);
+  return z * y;
+}
+
+static float
+rff (float x)
+{
+  return x - std::floorf (x);
 }
 
 static v3f
@@ -1313,9 +1327,9 @@ random_velocity (u32 iseed1, VolumeParticleSpawner *tem)
 {
   v3f min = tem->velocity_min;
   v3f max = tem->velocity_max;
-  float dx = (iseed1 & 0x3ff) * 1.0f / 1023.0f;
-  float dy = ((iseed1 >> 10) & 0x3ff) * 1.0f / 1023.0f;
-  float dz = ((iseed1 >> 20) & 0x3ff) * 1.0f / 1023.0f;
+  float dx = (iseed1 & 0x3ff) * (1.0f / 1023.0f);
+  float dy = ((iseed1 >> 10) & 0x3ff) * (1.0f / 1023.0f);
+  float dz = ((iseed1 >> 20) & 0x3ff) * (1.0f / 1023.0f);
   return v3f ((max.X - min.X) * dx + min.X,
 	      (max.Y - min.Y) * dy + min.Y,
 	      (max.Z - min.Z) * dz + min.Z);
@@ -1338,16 +1352,23 @@ ParticleManager::step_volume_spawners (float dtime)
   MutexAutoLock lock (m_particle_list_lock);
   ScopeProfiler sp (g_profiler, "ParticleManager: step_volume_spawners",
 		    SPT_AVG, PRECISION_MICRO);
-  double t = this->time_elapsed += dtime;
   float r = 1.0f / 255.0f;
   float r1 = 1.0f / 65535.0f;
   u32 dnr = m_env->getDayNightRatio ();
   u8 daylight = decode_light (blend_light (dnr, LIGHT_SUN, 0));
+  float yaw = m_env->getLocalPlayer ()->getYaw () * core::DEGTORAD;
+  VolumeParticleData data;
+
+  this->time_elapsed += dtime;
+
+  data.cs = std::cosf (yaw);
+  data.sn = std::sinf (yaw);
 
   for (auto &i : volume_spawners)
     {
       VolumeParticleSpawner *tem = i.second;
       std::unordered_map<u64, std::vector<u16>> used_slots;
+      float t = std::fmod (this->time_elapsed, tem->period);
       Camera *camera = client->getCamera ();
       v3f cam_pos = camera->getPosition ();
       v3s16 pos = floatToInt (cam_pos, BS);
@@ -1358,7 +1379,8 @@ ParticleManager::step_volume_spawners (float dtime)
       int red = tem->color.getRed ();
       int green = tem->color.getGreen ();
       int blue = tem->color.getBlue ();
-      VolumeParticleData data;
+      v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
+      float range_reciprocal = 1.0f / (float) tem->range_horizontal;
 
       for (auto &i : tem->m_slots)
 	{
@@ -1384,7 +1406,6 @@ ParticleManager::step_volume_spawners (float dtime)
 		  || is_column_visible (tem->visibility_map, x, z,
 					tem->visibility_test))
 		{
-		  v3f cam_offset = intToFloat (m_env->getCameraOffset (), BS);
 		  PcgRandom pr (Mapgen::getBlockSeed2 (v3s16 (z, 0, x),
 						       0xdc321c6bu));
 		  int i, count = pr.range (tem->particles_per_column + 1);
@@ -1396,7 +1417,7 @@ ParticleManager::step_volume_spawners (float dtime)
 			       ? std::max (height, ymax) : ymax);
 		  float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
 					    + (x - pos.X) * (x - pos.X))
-				/ (float) tem->range_horizontal);
+				* range_reciprocal);
 		  int alpha = (1 - dist * dist) * 255;
 		  u8 camera_light = daylight;
 		  const NodeDefManager *ndef = m_env->getGameDef ()->ndef ();
@@ -1428,11 +1449,12 @@ ParticleManager::step_volume_spawners (float dtime)
 		      float dz = (iseed / 0x100 & 255) * r;
 		      float offset = (iseed / 0x10000) * r1;
 		      u32 iseed_1 = jenkins_hash (iseed);
-		      float delta = lpr (offset * tem->period + t, tem->period);
+		      float delta = offset * tem->period + t;
 		      v3f velocity = random_velocity (iseed_1, tem);
-		      v3f particle_pos (x - 0.5f + lpr (dx + velocity.X * delta, 1.0),
-					ymin + lpr (velocity.Y * delta - ymin, ymax - ymin),
-					z - 0.5f + lpr (dz + velocity.Z * delta, 1.0));
+		      v3f particle_pos (x - 0.5f + rff (dx + velocity.X * delta),
+					ymin + lpr (velocity.Y * delta - ymin,
+						    ymax - ymin),
+					z - 0.5f + rff (dz + velocity.Z * delta));
 		      if (particle_pos.Y >= hmmin - 0.5f
 			  && particle_pos.Y <= hmmax + 0.5f)
 			{
@@ -1458,8 +1480,11 @@ ParticleManager::step_volume_spawners (float dtime)
 	  assert (buffer != NULL);
 
 	  buffer->release_bulk (slots->begin (), slots->end ());
-	  if (!i.second.empty ())
-	    *slots = std::move (i.second);
+ 	  if (!i.second.empty ())
+	    {
+	      *slots = std::move (i.second);
+	      buffer->use ();
+	    }
 	  else
 	    tem->m_slots.erase (i.first);
 	}

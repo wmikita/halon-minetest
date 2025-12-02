@@ -192,6 +192,8 @@ public:
 	  return id;
 	}
 
+	inline void use (void) { m_usage_timer = 0.0f; };
+
 	virtual const core::aabbox3df &getBoundingBox() const override;
 
 	virtual void render() override;
@@ -213,6 +215,11 @@ private:
 
 	/* Unique ID.  */
 	u64 id;
+
+	/* ID of last volume particle spawner to have accessed this
+	   buffer, and index of the material which it matched.  */
+	u64 last_spawner = 0;
+	int last_material = 0;
 };
 
 typedef short heightmap_block[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
