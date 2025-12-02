@@ -1488,7 +1488,7 @@ ParticleManager::delete_volume_particle_spawner_1 (u64 id, bool release_slots)
 {
   auto it = volume_spawners.find (id);
 
-  if (it != volume_spawners.end (id))
+  if (it != volume_spawners.end ())
     {
       VolumeParticleSpawner *spawner = it->second;
 
@@ -1526,7 +1526,7 @@ ParticleManager::set_column_visibility_map (u64 id, struct ColumnVisibilityMap *
   MutexAutoLock lock (m_particle_list_lock);
   auto it = volume_spawners.find (id);
 
-  if (it != volume_spawners.end (id))
+  if (it != volume_spawners.end ())
     {
       free (it->second->visibility_map);
       it->second->visibility_map = map;
