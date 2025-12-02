@@ -1312,8 +1312,8 @@ ParticleManager::initialize_volume_spawner (VolumeParticleSpawner *spawner)
 static float
 lpr (float x, float y)
 {
-  float z = x / y - std::floorf (x / y);
-  return z * y;
+  float z = x - std::floorf (x / y) * y;
+  return z;
 }
 
 static float
