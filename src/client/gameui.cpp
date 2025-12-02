@@ -129,8 +129,8 @@ void GameUI::update(const RunStats &stats, Client *client, MapDrawControl *draw_
 			<< "pos: (" << (player_position.X / BS)
 			<< ", " << (player_position.Y / BS)
 			<< ", " << (player_position.Z / BS)
-			<< " H: " << map.index_height_map (std::floorf (player_position.X / BS + 0.5f),
-							   std::floorf (player_position.Z / BS + 0.5f))
+			<< " H: " << map.index_height_map (floorf (player_position.X / BS + 0.5f),
+							   floorf (player_position.Z / BS + 0.5f))
 			<< ") | yaw: " << (wrapDegrees_0_360(cam.camera_yaw)) << "° "
 			<< yawToDirectionString(cam.camera_yaw)
 			<< " | pitch: " << (-wrapDegrees_180(cam.camera_pitch)) << "°"
