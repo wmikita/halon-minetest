@@ -1361,8 +1361,8 @@ ParticleManager::step_volume_spawners (float dtime)
 
   this->time_elapsed += dtime;
 
-  data.cs = std::cosf (yaw);
-  data.sn = std::sinf (yaw);
+  data.cs = cosf (yaw);
+  data.sn = sinf (yaw);
 
   for (auto &i : volume_spawners)
     {
@@ -1415,7 +1415,7 @@ ParticleManager::step_volume_spawners (float dtime)
 			       ? std::max (height, ymin) : ymin);
 		  int hmmax = (tem->above_heightmap_p
 			       ? std::max (height, ymax) : ymax);
-		  float dist = (std::sqrtf ((z - pos.Z) * (z - pos.Z)
+		  float dist = (sqrtf ((z - pos.Z) * (z - pos.Z)
 					    + (x - pos.X) * (x - pos.X))
 				* range_reciprocal);
 		  int alpha = (1 - dist * dist) * 255;
