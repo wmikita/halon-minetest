@@ -171,6 +171,8 @@ public:
 	void release(u16 index);
 	typedef std::vector<u16>::const_iterator u16_const_iterator;
 	void release_bulk (u16_const_iterator, u16_const_iterator);
+	void clear_slots (u16 *, ptrdiff_t, ptrdiff_t);
+	void enable_slots (u16 *, u16, u16);
 
 	/// @return video::S3DVertex[4]
 	video::S3DVertex *getVertices(u16 index);
@@ -184,12 +186,6 @@ public:
 	}
 	virtual u32 getMaterialCount() const override {
 		return 1;
-	}
-
-	inline u64
-	get_id (void)
-	{
-	  return id;
 	}
 
 	inline void use (void) { m_usage_timer = 0.0f; };
@@ -212,19 +208,10 @@ private:
 	// total count of contained particles
 	u16 m_count = 0;
 	mutable bool m_bounding_box_dirty = true;
-
-	/* Unique ID.  */
-	u64 id;
-
-	/* ID of last volume particle spawner to have accessed this
-	   buffer, and index of the material which it matched.  */
-	u64 last_spawner = 0;
-	int last_material = 0;
 };
 
 typedef short heightmap_block[MAP_BLOCKSIZE * MAP_BLOCKSIZE];
 class VolumeParticleSpawner;
-typedef std::unordered_map<u64, std::vector<u16>> buffer_slot_list;
 
 extern "C"
 {
@@ -236,6 +223,30 @@ extern "C"
   };
 }
 
+struct buffer_slot_cache
+{
+  /* If this texture slot's material is shared with another, pointer
+     to that material's buffer slot cache, or NULL otherwise.  The
+     subsequent fields are invalid if this is set.  */
+  struct buffer_slot_cache *indirect;
+
+  /* The particle buffer to which this cache refers.  */
+  ParticleBuffer *buffer;
+
+  /* Size of this cache's data, in elements.  */
+  size_t size;
+
+  /* Indices of the first available slot in this cache and the slot
+     after the last slot defined, respectively.  */
+  ptrdiff_t i, head;
+
+  /* Pointer to SIZE elements holding HEAD offsets into the vertex
+     buffer.  */
+  u16 *data;
+};
+
+typedef struct buffer_slot_cache *buffer_slot_list;
+
 class VolumeParticleSpawner
 {
 public:
@@ -245,7 +256,7 @@ public:
 
   std::vector<ClientParticleTexture> m_texpool;
   std::vector<video::SMaterial> m_materials;
-  buffer_slot_list m_slots;
+  buffer_slot_list m_slots = NULL;
 
   u64 id;
 
@@ -330,13 +341,13 @@ private:
 	void stepBuffers(float dtime);
 
   ParticleBuffer *find_particle_buffer (video::SMaterial &);
-  ParticleBuffer *particle_buffer_from_id (u64);
 
   void add_volume_particle (VolumeParticleSpawner *, ClientMap &,
-			    struct VolumeParticleData *, buffer_slot_list *);
+			    struct VolumeParticleData *);
+  void prepare_volume_spawner (VolumeParticleSpawner *);
   void initialize_volume_spawner (VolumeParticleSpawner *);
   void step_volume_spawners (float);
-  void delete_particle_buffer (u64);
+  void delete_particle_buffer (ParticleBuffer *);
   bool delete_volume_particle_spawner_1 (u64, bool);
 
 	void clearAll();
