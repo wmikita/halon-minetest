@@ -243,6 +243,10 @@ struct buffer_slot_cache
   /* Pointer to SIZE elements holding HEAD offsets into the vertex
      buffer.  */
   u16 *data;
+
+  /* And the start of this buffer's vertex data, recorded before each
+     particle cycle.  */
+  video::S3DVertex *vertices;
 };
 
 typedef struct buffer_slot_cache *buffer_slot_list;
@@ -279,6 +283,8 @@ public:
 
   bool above_heightmap_p : 1; /* TODO */
 };
+
+#define VOLUME_SPAWNER_RANGE_MAX 15
 
 class ClientMap;
 struct VolumeParticleData;
@@ -342,7 +348,7 @@ private:
 
   ParticleBuffer *find_particle_buffer (video::SMaterial &);
 
-  void add_volume_particle (VolumeParticleSpawner *, ClientMap &,
+  void add_volume_particle (VolumeParticleSpawner *,
 			    struct VolumeParticleData *);
   void prepare_volume_spawner (VolumeParticleSpawner *);
   void initialize_volume_spawner (VolumeParticleSpawner *);

@@ -1203,9 +1203,10 @@ struct VolumeParticleData
 {
   video::SColor default_color;
   u32 iseed;
-  v3f offset;
-  v3s16 light_pos;
+  u32 dnr;
   float sn, cs;
+  v3f offset;
+  v3f particle_pos;
 #ifdef notdef
   u32 prepare_us_time;
   u32 us_time;
@@ -1215,8 +1216,10 @@ struct VolumeParticleData
 /* Forward declaration.  */
 static int allocate_one_slot (struct buffer_slot_cache *);
 
+#define CACHE_BUFFER_VERTICES(c, slot) ((c)->vertices + (slot) * 4)
+
 void
-ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap &map,
+ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner,
 				      struct VolumeParticleData *data)
 {
   /* Select a texture and material.  */
@@ -1225,53 +1228,56 @@ ParticleManager::add_volume_particle (VolumeParticleSpawner *spawner, ClientMap 
 #endif /* notdef */
   int idx = data->iseed % spawner->m_materials.size ();
   struct buffer_slot_cache *cache = &spawner->m_slots[idx];
-  ParticleBuffer *buffer = cache->buffer;
   int slot = allocate_one_slot (cache);
 
   if (slot != -1)
     {
-      video::S3DVertex *vertices = buffer->getVertices (slot);
+      video::S3DVertex *vertices = CACHE_BUFFER_VERTICES (cache, slot);
       f32 tx0, tx1, ty0, ty1, hx = spawner->size * 0.5f * spawner->sx;
       f32 hy = spawner->size * 0.5f * spawner->sy;
-      int i;
-      bool pos_ok;
       video::SColor color = data->default_color;
       float sn = data->sn, cs = data->cs;
-
-      if (!spawner->above_heightmap_p)
-	{
-	  MapNode n = map.getNode (data->light_pos, &pos_ok);
-	  u8 light = (!pos_ok ? 0
-		      : n.getLightBlend (m_env->getDayNightRatio (),
-					 m_env->getGameDef ()->ndef ()->getLightingFlags (n)));
-	  u8 m_light = decode_light (light);
-	  color.set (255, m_light * spawner->color.getRed () / 255,
-		     m_light * spawner->color.getGreen () / 255,
-		     m_light * spawner->color.getBlue () / 255);
-	}
+      float offx = data->offset.X;
+      float offy = data->offset.Y;
+      float offz = data->offset.Z;
 
       tx0 = spawner->texpos.X;
       tx1 = spawner->texpos.X + spawner->texsize.X;
       ty0 = spawner->texpos.Y;
       ty1 = spawner->texpos.Y + spawner->texsize.Y;
 
-      vertices[0]
-	= video::S3DVertex (-hx, -hy, 0, 0, 0, 0, color, tx0, ty1);
-      vertices[1]
-	= video::S3DVertex (hx, -hy, 0, 0, 0, 0, color, tx1, ty1);
-      vertices[2]
-	= video::S3DVertex (hx, hy, 0, 0, 0, 0, color, tx1, ty0);
-      vertices[3]
-	= video::S3DVertex (-hx, hy, 0, 0, 0, 0, color, tx0, ty0);
-
-      for (i = 0; i < 4; ++i)
+#define ROTATE(x, y, z) (x) * cs - (z) * sn + offx,	\
+	(y) + offy,					\
+	(x) * sn + (z) * cs + offz
+      if (!spawner->above_heightmap_p)
 	{
-	  video::S3DVertex *v = &vertices[i];
-	  v->Pos.set (v->Pos.X * cs - v->Pos.Z * sn,
-		      v->Pos.Y,
-		      v->Pos.X * sn + v->Pos.Z * cs);
-	  v->Pos += data->offset;
+	  const NodeDefManager *ndef = m_env->getGameDef ()->ndef ();
+	  ClientMap &map = m_env->getClientMap ();
+	  /* Branches in generated inline code render floorf quite
+	     expensive under GCC without SSE 4.2 (specifically,
+	     roundsd) when provided with pseudo-random data; as such
+	     it is moved here.  */
+	  v3s16 light_pos (floorf (data->particle_pos.X + 0.5f),
+			   floorf (data->particle_pos.Y + 0.5f),
+			   floorf (data->particle_pos.Z + 0.5f));
+	  MapNode n = map.getNode (light_pos, NULL);
+	  u8 light = n.getLightBlend (data->dnr, ndef->getLightingFlags (n));
+	  u8 m_light = decode_light (light);
+	  color.set (color.getAlpha (),
+		     m_light * spawner->color.getRed () / 255,
+		     m_light * spawner->color.getGreen () / 255,
+		     m_light * spawner->color.getBlue () / 255);
 	}
+      
+      vertices[0]
+	= video::S3DVertex (ROTATE (-hx, -hy, 0), 0, 0, 0, color, tx0, ty1);
+      vertices[1]
+	= video::S3DVertex (ROTATE (hx, -hy, 0), 0, 0, 0, color, tx1, ty1);
+      vertices[2]
+	= video::S3DVertex (ROTATE (hx, hy, 0), 0, 0, 0, color, tx1, ty0);
+      vertices[3]
+	= video::S3DVertex (ROTATE (-hx, hy, 0), 0, 0, 0, color, tx0, ty0);
+#undef ROTATE
     }
 #ifdef notdef
   data->us_time += porting::getTimeUs () - us_time;
@@ -1349,6 +1355,7 @@ allocate_one_slot (struct buffer_slot_cache *cache)
 		throw std::bad_alloc ();
 	    }
 
+	  cache->vertices = cache->buffer->getVertices (0);
 	  cache->data[cache->i++] = slot;
 	  cache->head++;
 	  return slot;
@@ -1384,12 +1391,18 @@ ParticleManager::prepare_volume_spawner (VolumeParticleSpawner *tem)
 	    throw std::bad_alloc ();
 	  cache->i = 0;
 	  cache->buffer = buffer;
+	  cache->vertices = buffer->getVertices (0);
 	  cache->head = allocated;
 	  cache->size = allocated;
 	  memcpy (cache->data, data, allocated * sizeof *data);
 	}
       else
-	cache->i = 0;
+	{
+	  cache->i = 0;
+	  /* XXX: is invalidating the buffer's bounding boxes
+	     appropriate here?  */
+	  cache->vertices = cache->buffer->getVertices (0);
+	}
     }
 }
 
@@ -1430,6 +1443,14 @@ is_column_visible (struct ColumnVisibilityMap *map, int x, int z,
 	  && (map->flags[dz * max + dx] & test));
 }
 
+/* Table of square roots up to VOLUME_SPAWNER_RANGE_MAX ^ 2.  */
+
+static float sqrtab[VOLUME_SPAWNER_RANGE_MAX * VOLUME_SPAWNER_RANGE_MAX + 1];
+
+/* Whether this table has been initialized.  */
+
+static bool sqrtab_initialized_p;
+
 void
 ParticleManager::step_volume_spawners (float dtime)
 {
@@ -1447,10 +1468,20 @@ ParticleManager::step_volume_spawners (float dtime)
 
   data.cs = cosf (yaw);
   data.sn = sinf (yaw);
+  data.dnr = dnr;
 #ifdef notdef
   data.us_time = 0;
   data.prepare_us_time = 0;
 #endif /* notdef */
+
+  if (!sqrtab_initialized_p)
+    {
+      int i, max = VOLUME_SPAWNER_RANGE_MAX * VOLUME_SPAWNER_RANGE_MAX;
+
+      for (i = 0; i <= max; i += 1)
+	sqrtab[i] = sqrtf ((float) i);
+      sqrtab_initialized_p = true;
+    }
 
   for (auto &i : volume_spawners)
     {
@@ -1492,8 +1523,8 @@ ParticleManager::step_volume_spawners (float dtime)
 			       ? std::max (height, ymin) : ymin);
 		  int hmmax = (tem->above_heightmap_p
 			       ? std::max (height, ymax) : ymax);
-		  float dist = (sqrtf ((z - pos.Z) * (z - pos.Z)
-					    + (x - pos.X) * (x - pos.X))
+		  float dist = (sqrtab[(z - pos.Z) * (z - pos.Z)
+				       + (x - pos.X) * (x - pos.X)]
 				* range_reciprocal);
 		  int alpha = (1 - dist * dist) * 255;
 		  u8 camera_light = daylight;
@@ -1535,9 +1566,6 @@ ParticleManager::step_volume_spawners (float dtime)
 		      if (particle_pos.Y >= hmmin - 0.5f
 			  && particle_pos.Y <= hmmax + 0.5f)
 			{
-			  v3s16 light_pos (floor (particle_pos.X + 0.5),
-					   floor (particle_pos.Y + 0.5),
-					   floor (particle_pos.Z + 0.5));
 			  if (!is_prepared)
 			    {
 			      prepare_volume_spawner (tem);
@@ -1545,9 +1573,9 @@ ParticleManager::step_volume_spawners (float dtime)
 			    }
 			  data.default_color.setAlpha (alpha);
 			  data.iseed = iseed_1;
+			  data.particle_pos = particle_pos;
 			  data.offset = particle_pos * BS - cam_offset;
-			  data.light_pos = light_pos;
-			  add_volume_particle (tem, map, &data);
+			  add_volume_particle (tem, &data);
 			}
 		    }
 		}

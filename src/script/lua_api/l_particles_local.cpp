@@ -346,6 +346,9 @@ ModApiParticlesLocal::l_add_volume_particle_spawner (lua_State *L)
   CHECK_INT_FIELD (range_vertical, 7);
 #undef CHECK_INT_FIELD
 
+  spawner.range_horizontal = std::min (spawner.range_horizontal,
+				       (s16) VOLUME_SPAWNER_RANGE_MAX);
+
   lua_getfield (L, 1, "above_heightmap");
   spawner.above_heightmap_p = lua_toboolean (L, -1);
   lua_pop (L, 2);
