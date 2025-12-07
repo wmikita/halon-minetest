@@ -1779,6 +1779,13 @@ bool ClientMap::isMeshOccluded(MapBlock *mesh_block, u16 mesh_size, v3s16 cam_po
 #define TOBLOCK(x) (((x) + 0x8000) / MAP_BLOCKSIZE - (0x8000 / MAP_BLOCKSIZE))
 #define MIN_BLOCK (S16_MIN / MAP_BLOCKSIZE)
 
+static bool
+opaque_for_heightmap (const ContentFeatures &cf)
+{
+  return (cf.walkable || cf.liquid_type != LIQUID_NONE
+	  || !cf.light_propagates);
+}
+
 static s16
 heightmap_scan (ClientMap *map, const NodeDefManager *ndef, v2s16 pos,
 		v3s16 relpos, s16 y)
@@ -1800,20 +1807,13 @@ heightmap_scan (ClientMap *map, const NodeDefManager *ndef, v2s16 pos,
 	  bool dummy;
 
 	  relpos.Y = iy;
-	  if (ndef->get (block->getNode (relpos, &dummy)).walkable)
+	  if (opaque_for_heightmap (ndef->get (block->getNode (relpos, &dummy))))
 	    return iy + by * MAP_BLOCKSIZE;
 	}
       sy = MAP_BLOCKSIZE - 1;
     }
 
   return S16_MIN;
-}
-
-static bool
-opaque_for_heightmap (const ContentFeatures &cf)
-{
-  return (cf.walkable || cf.liquid_type != LIQUID_NONE
-	  || !cf.light_propagates);
 }
 
 void
