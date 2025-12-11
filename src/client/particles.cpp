@@ -1592,9 +1592,13 @@ ParticleManager::step_volume_spawners (float dtime)
 
 	    if (cache->buffer)
 	      {
-		cache->buffer->clear_slots (cache->data, cache->i,
-					    cache->head);
-		if (cache->i)
+		/* If this spawner was never prepared, CACHE->i will
+		   not have been reset to 0, though the cache itself
+		   were never used.  */
+		ptrdiff_t start = is_prepared ? cache->i : 0;
+
+		cache->buffer->clear_slots (cache->data, start, cache->head);
+		if (start != 0)
 		  {
 		    cache->buffer->use ();
 		    cache->buffer->enable_slots (cache->data, 0, cache->i);
