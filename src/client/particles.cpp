@@ -670,6 +670,8 @@ ParticleBuffer::clear_slots (u16 *slots, ptrdiff_t start, ptrdiff_t end)
       indices[6 * slot + 4] = 0;
       indices[6 * slot + 5] = 0;
     }
+
+  m_bounding_box_dirty = true;
 }
 
 void
@@ -681,8 +683,11 @@ ParticleBuffer::enable_slots (u16 *slots, u16 start, u16 end)
     {
       int i;
       for (i = 0; i < 6; i++)
-	indices[6 * start + i] = 4 * slots[start] + quad_indices[i];
+	indices[6 * slots[start] + i]
+	  = 4 * slots[start] + quad_indices[i];
     }
+
+  m_bounding_box_dirty = true;
 }
 
 video::S3DVertex *ParticleBuffer::getVertices(u16 index)
@@ -710,10 +715,11 @@ const core::aabbox3df &ParticleBuffer::getBoundingBox() const
 
 	core::aabbox3df box{{0, 0, 0}};
 	bool first = true;
+	u16 *indices = m_mesh_buffer->getIndices ();
 	for (u16 i = 0; i < m_count; i++) {
 		// check if this index is used
 		static_assert(quad_indices[1] != 0);
-		if (m_mesh_buffer->getIndices()[6 * i + 1] == 0)
+		if (indices[6 * i + 1] == 0)
 			continue;
 
 		for (u16 j = 0; j < 4; j++) {
@@ -741,6 +747,13 @@ void ParticleBuffer::render()
 	driver->setTransform(video::ETS_WORLD, core::matrix4());
 	driver->setMaterial(m_mesh_buffer->getMaterial());
 	driver->drawMeshBuffer(m_mesh_buffer.get());
+#ifdef notdef
+  if (m_from_volume_spawner)
+    {
+      driver->setMaterial (video::SMaterial ());
+      driver->draw3DBox (getBoundingBox (), video::SColor (255, 255, 255, 255));
+    }
+#endif /* notdef */
 }
 
 /*
