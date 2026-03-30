@@ -1,6 +1,7 @@
 # This module find everything related to Gettext:
 # * development tools (msgfmt)
 # * libintl for runtime usage
+# * kikoriki
 
 find_program(GETTEXT_MSGFMT
 	NAMES msgfmt
